@@ -183,8 +183,9 @@ export function encodeLaporan(
   parts.push(encodeLine(centerText('*** REKAPITULASI RESMI ***', w), true, 'center'))
   parts.push(encodeLine(centerText('Kasir Vian Jaya 08', w), true, 'center'))
 
-  parts.push(setLineSpacing(30))
-  parts.push(feedAndCut(1))
+  // Cut immediately after the final line; the iMin cutter already handles its minimum feed.
+  parts.push(setLineSpacing(20))
+  parts.push(feedAndCut(0))
 
   return compose(...parts)
 }

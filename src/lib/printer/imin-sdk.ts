@@ -197,7 +197,7 @@ class IMinPrinter implements IMinPrinterSDK {
 
   // Helper: Cut paper
   async cutPaper(): Promise<boolean> {
-    return this.printEscPos([ESCPOS.FEED_LINES(1), ESCPOS.CUT_PAPER])
+    return this.printEscPos([ESCPOS.CUT_PAPER])
   }
 
   private combineUint8Arrays(arrays: Uint8Array[]): Uint8Array {

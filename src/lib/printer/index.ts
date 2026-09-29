@@ -248,8 +248,7 @@ class UnifiedPrinter {
       commands.push(new Uint8Array([0x0A]))
     }
     
-    // Feed and cut
-    commands.push(new Uint8Array([0x1B, 0x64, 1])) // Feed 1 line before auto-cut
+    // Cut immediately after the final line to avoid a large blank margin.
     commands.push(new Uint8Array([0x1D, 0x56, 0x42, 0x00])) // Cut paper
     
     // Combine all commands

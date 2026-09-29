@@ -139,7 +139,8 @@ export function encodeReceipt(
   parts.push(encodeLine(centerText('Kritik & Saran', w), true, 'center'))
   parts.push(encodeLine(centerText('WA 0852-8000-4508', w), true, 'center'))
 
-  parts.push(setLineSpacing(30))
+  // Reset spacing before cutting so the printer does not feed a large blank margin.
+  parts.push(setLineSpacing(20))
   parts.push(feedAndCut(0))
 
   return compose(...parts)
