@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kasir Vian Jaya 08</string>
+    <string name="title_activity_main">Kasir Vian Jaya 08</string>
+    <string name="package_name">id.vianjaya.kasir.cabang1</string>
+    <string name="custom_url_scheme">id.vianjaya.kasir.cabang1</string>
+</resources>

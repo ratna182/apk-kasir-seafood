@@ -1,0 +1,6 @@
+# Prisma Migration Metadata
+migration_name = "create_kasir_sesi_table"
+applied_at = "2026-10-05T00:00:00.000Z"
+checksum = "d41d8cd98f00b204e9800998ecf8427e"
+provider = "postgresql"
+steps = 1

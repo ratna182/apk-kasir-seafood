@@ -72,6 +72,31 @@ Buka browser di [http://localhost:3000](http://localhost:3000).
 
 ---
 
+## Android APK per Cabang
+
+APK menggunakan server Next.js yang sudah di-deploy dan tetap memakai bridge printer iMin.
+Setiap cabang dapat dibuat sebagai APK terpisah dengan `CAPACITOR_SERVER_URL`, `CAPACITOR_APP_ID`, dan `CAPACITOR_APP_NAME` masing-masing.
+
+```bash
+npm install
+npx cap add android
+npm run android:sync
+npm run android:open
+```
+
+Contoh konfigurasi build Cabang 1 di PowerShell:
+
+```powershell
+$env:CAPACITOR_SERVER_URL="https://kasir-cabang-1.example.com"
+$env:CAPACITOR_APP_ID="id.vianjaya.kasir.cabang1"
+$env:CAPACITOR_APP_NAME="Kasir Vian Jaya 08 - Cabang 1"
+npm run android:sync
+```
+
+Build APK dilakukan dari project Android yang dibuka melalui Android Studio. URL server wajib HTTPS agar komunikasi login dan transaksi aman.
+
+---
+
 ## 🚀 Panduan Deploy ke Railway
 
 1. Buat project baru di [Railway.app](https://railway.app).
