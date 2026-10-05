@@ -18,7 +18,7 @@ const ESCPOS = {
   INIT: new Uint8Array([0x1B, 0x40]), // Initialize printer
   FEED_LINE: new Uint8Array([0x0A]), // Feed line
   FEED_LINES: (n: number) => new Uint8Array([0x1B, 0x64, n]), // Feed n lines
-  CUT_PAPER: new Uint8Array([0x1D, 0x56, 0x42, 0x00]), // Cut paper
+  CUT_PAPER: new Uint8Array([0x1D, 0x56, 0x00]), // Full cut paper (no extra feed)
   SET_BOLD: new Uint8Array([0x1B, 0x45, 0x01]), // Bold on
   UNSET_BOLD: new Uint8Array([0x1B, 0x45, 0x00]), // Bold off
   SET_ALIGN_CENTER: new Uint8Array([0x1B, 0x61, 0x01]), // Center align

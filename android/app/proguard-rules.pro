@@ -5,6 +5,13 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
+# Optimize bytecode but keep original class/method/field names for debugging
+-dontobfuscate
+
+# Keep Capacitor / iMin printer classes
+-keep class com.getcapacitor.** { *; }
+-keep class com.github.iminsoftware.** { *; }
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:
