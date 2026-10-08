@@ -1,0 +1,77 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: kasir-seafood/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          ndk-version: r27c
+          build-tools-version: 34.0.0
+          cmake-version: 3.22.1
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('kasir-seafood/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install npm dependencies
+        working-directory: kasir-seafood
+        run: npm ci
+
+      - name: Build web assets
+        working-directory: kasir-seafood
+        run: npm run build
+
+      - name: Capacitor sync android
+        working-directory: kasir-seafood
+        run: npx cap sync android
+
+      - name: Build Release APK
+        working-directory: kasir-seafood/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: kasir-seafood/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Upload APK (debug)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: kasir-seafood/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
