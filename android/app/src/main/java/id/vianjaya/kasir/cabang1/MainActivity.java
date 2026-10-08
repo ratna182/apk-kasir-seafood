@@ -26,7 +26,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         // Reconnect printer service on resume (after sleep/wake)
         if (!printerConnected.get() && !isInitializing.get()) {
