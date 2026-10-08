@@ -300,7 +300,6 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
         warungNama: session.warungNama,
         warungAlamat: session.warungAlamat,
         width: printerWidth,
-        preview: false,
         uangDiterima: typeof uangDiterima === 'number' ? uangDiterima : undefined,
         kembalian: kembalianResult?.kembalian
       })

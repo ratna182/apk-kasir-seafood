@@ -49,6 +49,8 @@ jobs:
       - name: Build web assets
         working-directory: kasir-seafood
         run: npm run build
+        env:
+          SESSION_SECRET: github-actions-build-only-not-for-runtime
 
       - name: Capacitor sync android
         working-directory: kasir-seafood
