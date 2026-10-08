@@ -45,6 +45,7 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('kasir-seafood/android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: |
             gradle-${{ runner.os }}-
+          fail-on-cache-miss: false
 
       - name: Install npm dependencies
         working-directory: kasir-seafood
