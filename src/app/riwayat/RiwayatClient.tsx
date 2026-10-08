@@ -137,6 +137,21 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
   const [expanded, setExpanded] = useState(false)
   const [printing, setPrinting] = useState(false)
   const d = sesi.detail
+
+  // Handle print with auto-retry via forceReconnect
+  const handlePrintWithRetry = async (data: Uint8Array, retries = 2): Promise<boolean> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const ok = await printer.print(data)
+      if (ok) return true
+      
+      if (attempt < retries) {
+        console.log(`Print attempt ${attempt + 1} failed, trying forceReconnect...`)
+        await printer.forceReconnect()
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+    return false
+  }
   const tanggal = new Date(sesi.tanggal + 'T00:00:00')
   const tanggalStr = tanggal.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const bukaStr = sesi.dibukaKembaliPada
@@ -176,7 +191,8 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
     setPrinting(true)
     try {
       const data = buildLaporanData()
-      const success = await printer.print(encodeLaporan(data, sesi.ditutupOleh, sesi.warungAlamat, printerWidth, { ditutupPada: sesi.ditutupPada, ditutupOleh: sesi.ditutupOleh }))
+      const encoded = encodeLaporan(data, sesi.ditutupOleh, sesi.warungAlamat, printerWidth, { ditutupPada: sesi.ditutupPada, ditutupOleh: sesi.ditutupOleh })
+      const success = await handlePrintWithRetry(encoded)
       if (success) {
         alert('Laporan berhasil dicetak.')
       } else {

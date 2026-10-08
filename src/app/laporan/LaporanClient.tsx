@@ -224,6 +224,21 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
     }
   }
 
+  // Handle print with auto-retry via forceReconnect
+  const handlePrintWithRetry = async (data: Uint8Array, retries = 2): Promise<boolean> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const ok = await printer.print(data)
+      if (ok) return true
+      
+      if (attempt < retries) {
+        console.log(`Print attempt ${attempt + 1} failed, trying forceReconnect...`)
+        await printer.forceReconnect()
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+    return false
+  }
+
   async function handlePrintThermal() {
     if (!data) return
     if (!kasirSesi || !await checkKasirStatus()) {
@@ -232,7 +247,8 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
     }
     setPrinting(true)
     try {
-      const success = await printer.print(encodeLaporan(data, currentWarungNama, data.warung.alamat ?? null, printerWidth, kasirSesi))
+      const encoded = encodeLaporan(data, currentWarungNama, data.warung.alamat ?? null, printerWidth, kasirSesi)
+      const success = await handlePrintWithRetry(encoded)
       if (success) {
         setFeedback({ type: 'success', message: 'Laporan berhasil dicetak.' })
       } else {

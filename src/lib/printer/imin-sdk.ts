@@ -79,6 +79,25 @@ class IMinPrinter implements IMinPrinterSDK {
   }
 
   async connect(): Promise<boolean> {
+    return this.connectWithTimeout(10000)
+  }
+
+  /**
+   * Force reconnect - useful when printer was working then stopped
+   * Call this from UI if print fails
+   */
+  async reconnect(): Promise<boolean> {
+    this.log('Force reconnecting...')
+    this.connected = false
+    this.setStatus('idle')
+    try {
+      await window.IMinPrinter?.disconnect()
+    } catch {}
+    await new Promise(r => setTimeout(r, 500))
+    return this.connectWithTimeout(15000)
+  }
+
+  private async connectWithTimeout(timeoutMs: number): Promise<boolean> {
     if (!this.isSupported()) {
       this.logError('iMin Printer SDK not supported')
       this.setStatus('unsupported')
@@ -90,18 +109,26 @@ class IMinPrinter implements IMinPrinterSDK {
       this.lastError = ''
       this.log('Connecting to iMin built-in printer...')
 
-      const result = await window.IMinPrinter!.connect()
+      const initResult = await window.IMinPrinter!.connect()
       
-      if (result) {
-        this.connected = true
-        this.setStatus('connected')
-        this.log('Connected to iMin built-in printer')
-        return true
-      } else {
-        this.logError('Failed to connect to iMin printer')
-        this.setStatus('idle')
-        return false
+      const startTime = Date.now()
+      while (Date.now() - startTime < timeoutMs) {
+        await new Promise(r => setTimeout(r, 500))
+        const status = await window.IMinPrinter!.getStatus()
+        if (status === 'connected') {
+          this.connected = true
+          this.setStatus('connected')
+          this.log('Connected to iMin built-in printer')
+          return true
+        }
+        if (status === 'error') {
+          break
+        }
       }
+      
+      this.logError('Connection timeout or failed')
+      this.setStatus('idle')
+      return false
     } catch (e) {
       this.logError('Connection failed', e)
       this.setStatus('idle')

@@ -19,6 +19,11 @@
 #   public *;
 #}
 
+# Keep IMinPrinterBridge for WebView JavaScript interface
+-keepclassmembers class id.vianjaya.kasir.cabang1.MainActivity$IMinPrinterBridge {
+    public *;
+}
+
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
 #-keepattributes SourceFile,LineNumberTable

@@ -72,6 +72,23 @@ export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSet
     setDebugInfo('')
   }, [onConfigured])
 
+  const handleForceReconnect = useCallback(async () => {
+    setError('')
+    setDebugInfo('Menyambungkan ulang printer...')
+    try {
+      const ok = await printer.forceReconnect()
+      if (ok) {
+        setDebugInfo('Reconnect berhasil!')
+      } else {
+        setError(printer.error || 'Reconnect gagal')
+        setDebugInfo(`Reconnect gagal: ${printer.error}`)
+      }
+    } catch (e) {
+      setError('Terjadi kesalahan saat reconnect.')
+      setDebugInfo(`Error: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }, [])
+
   const handleUseWindowPrint = useCallback(() => {
     setConfig(null)
     clearPrinterConfig()
@@ -91,9 +108,12 @@ export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSet
 
         {config ? (
           <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-success-soft, #d4edda)', borderRadius: '8px', border: '1px solid var(--color-success, #28a745)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#28a745', display: 'inline-block' }} />
-              <span style={{ fontWeight: 700 }}>{config.deviceName}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#28a745', display: 'inline-block' }} />
+                <span style={{ fontWeight: 700 }}>{config.deviceName}</span>
+              </div>
+              <span style={{ fontSize: '0.75rem', color: '#28a745', fontWeight: 600 }}>{status.toUpperCase()}</span>
             </div>
             <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.25rem' }}>
               Printer terhubung ({config.connectionType === 'imin' ? 'Built-in' : 'Bluetooth'})
@@ -151,9 +171,14 @@ export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSet
               )}
             </>
           ) : (
-            <button type="button" onClick={handleDisconnect} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid var(--color-danger, #dc3545)', background: 'transparent', color: 'var(--color-danger, #dc3545)', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
-              Putuskan Koneksi
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <button type="button" onClick={handleDisconnect} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid var(--color-danger, #dc3545)', background: 'transparent', color: 'var(--color-danger, #dc3545)', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Putuskan Koneksi
+              </button>
+              <button type="button" onClick={handleForceReconnect} disabled={status === 'connecting'} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: 'none', background: 'var(--color-warning, #ffc107)', color: '#000', fontWeight: 700, fontSize: '0.95rem', cursor: status === 'connecting' ? 'wait' : 'pointer', opacity: status === 'connecting' ? 0.7 : 1 }}>
+                {status === 'connecting' ? 'Menyambungkan ulang...' : '🔄 Reconnect Printer'}
+              </button>
+            </div>
           )}
           <button type="button" onClick={handleUseWindowPrint} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary, #666)', fontWeight: 500, fontSize: '0.85rem', cursor: 'pointer' }}>
             Gunakan Print Bawaan

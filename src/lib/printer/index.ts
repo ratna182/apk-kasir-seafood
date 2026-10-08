@@ -174,6 +174,22 @@ class UnifiedPrinter {
   }
 
   /**
+   * Force reconnect current printer (call when print fails)
+   */
+  async forceReconnect(): Promise<boolean> {
+    if (this.activePrinter === 'imin') {
+      this.log('Force reconnecting iMin printer...')
+      return iminPrinter.reconnect()
+    }
+    if (this.activePrinter === 'bluetooth') {
+      this.log('Force reconnecting Bluetooth printer...')
+      await bluetoothPrinter.disconnect()
+      return this.connectBluetooth()
+    }
+    return false
+  }
+
+  /**
    * Print data using active printer
    */
   async print(data: Uint8Array): Promise<boolean> {

@@ -6,8 +6,9 @@ import { Search, ShoppingCart, X, Minus, Plus, Printer, CreditCard, Banknote, Ch
 import Receipt, { type PrinterWidth } from '@/components/Receipt'
 import PrinterSetup from '@/components/PrinterSetup'
 import PrinterStatusBadge from '@/components/PrinterStatus'
-import { printer } from '@/lib/printer/bluetooth'
+import { printer } from '@/lib/printer'
 import { loadPrinterConfig } from '@/lib/printer/storage'
+import { encodeReceipt } from '@/lib/printer/receipt-encoder'
 import { hitungKembalian, generateQuickAmounts } from '@/lib/payment/cash'
 import { QUICK_TABLES, LESEHAN } from '@/lib/table-layout'
 
@@ -105,6 +106,21 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       setPrinterWidth(saved.width)
       printer.autoReconnect()
     }
+  }, [])
+
+  // Handle print with auto-retry via forceReconnect
+  const handlePrintWithRetry = useCallback(async (data: Uint8Array, retries = 2): Promise<boolean> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const ok = await printer.print(data)
+      if (ok) return true
+      
+      if (attempt < retries) {
+        console.log(`Print attempt ${attempt + 1} failed, trying forceReconnect...`)
+        await printer.forceReconnect()
+        await new Promise(r => setTimeout(r, 1000))
+      }
+    }
+    return false
   }, [])
 
   useEffect(() => {
@@ -271,69 +287,35 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   }
 
   async function handlePrintReceipt() {
-    if (completedTransaksi) {
-      setPrinting(true)
-      try {
-        const printWindow = window.open('', '_blank', 'width=280,height=500')
-        if (printWindow) {
-          const receiptEl = document.querySelector('.print-receipt')
-          const receiptHTML = receiptEl ? receiptEl.outerHTML : ''
-          
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>Cetak Struk</title>
-              <style>
-                @page { size: auto; margin: 0; }
-                * { box-sizing: border-box; margin: 0; padding: 0; }
-                html, body { width: 100%; margin: 0; padding: 0; }
-                body {
-                  width: 100%; margin: 0; padding: 0 2mm;
-                  font-family: 'Helvetica', 'Arial', sans-serif;
-                  font-size: 15px; font-weight: bold;
-                  color: black; background: white;
-                  -webkit-print-color-adjust: exact;
-                  print-color-adjust: exact;
-                }
-                .print-receipt { width: 100%; padding: 0 2mm; text-align: center; }
-                .print-header { text-align: center; margin-bottom: 3px; }
-                .receipt-logo { display: block; width: 1.7cm; height: 1.7cm; object-fit: contain; margin: 0 auto 3px; }
-                .receipt-socials { text-align: center; }
-                .receipt-socials p { display: block; margin: 0; text-align: center; }
-                .print-header h2 { font-size: 18px; text-transform: uppercase; margin: 0 0 2px; line-height: 1.3; }
-                .print-header p { font-size: 14px; margin: 0; line-height: 1.3; }
-                .print-divider { border: none; border-top: 1px dashed black; margin: 3px 0; }
-                .receipt-meta { text-align: center; margin: 2px 0; line-height: 1.4; }
-                .receipt-meta div { margin: 0; }
-                .receipt-items { text-align: center; }
-                .receipt-item-block { margin: 2px 0; text-align: center; }
-                .receipt-item-row { display: flex; justify-content: space-between; text-align: center; }
-                .receipt-item-detail { font-size: 14px; text-align: center; line-height: 1.4; }
-                .receipt-item-note { font-size: 13px; font-style: italic; text-align: center; }
-                .receipt-summary { margin-top: 3px; }
-                .receipt-row { display: flex; justify-content: space-between; text-align: center; padding: 1px 0; line-height: 1.4; }
-                .receipt-grand { font-size: 17px; }
-                .print-footer { text-align: center; margin-top: 3px; margin-bottom: 0; padding-bottom: 0; font-size: 14px; line-height: 1.4; }
-                .print-footer p { margin: 0; line-height: 1.4; }
-                @media print { body { width: 100%; } .print-receipt { width: 100%; } }
-              </style>
-            </head>
-            <body>${receiptHTML}</body>
-            </html>
-          `)
-          printWindow.document.close()
-          printWindow.focus()
-          setTimeout(() => { printWindow.print() }, 300)
-        }
-      } catch (e) {
-        console.error('Print error:', e)
-        setError(`Gagal mencetak: ${e instanceof Error ? e.message : 'Unknown error'}`)
-      } finally {
-        setPrinting(false)
+    if (!completedTransaksi) return
+    
+    setPrinting(true)
+    try {
+      // Use ESC/POS encoder for thermal printer (both Bluetooth & iMin)
+      const encoded = encodeReceipt({
+        transaction: completedTransaksi,
+        cashier: session.namaLengkap || session.username,
+        username: session.username,
+        warungKode: session.warungKode,
+        warungNama: session.warungNama,
+        warungAlamat: session.warungAlamat,
+        width: printerWidth,
+        preview: false,
+        uangDiterima: typeof uangDiterima === 'number' ? uangDiterima : undefined,
+        kembalian: kembalianResult?.kembalian
+      })
+
+      const ok = await handlePrintWithRetry(encoded)
+      if (!ok) {
+        setError(printer.error || 'Gagal mencetak ke printer thermal')
+      } else {
+        setSuccess('Struk terkirim ke printer')
       }
+    } catch (e) {
+      console.error('Print error:', e)
+      setError(`Gagal mencetak: ${e instanceof Error ? e.message : 'Unknown error'}`)
+    } finally {
+      setPrinting(false)
     }
   }
 

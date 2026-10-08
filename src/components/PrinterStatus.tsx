@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { printer } from '../lib/printer/bluetooth'
+import { printer } from '../lib/printer'
 import { loadPrinterConfig } from '../lib/printer/storage'
 import type { PrinterStatus, PrinterConfig } from '../lib/printer/types'
 
