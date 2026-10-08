@@ -158,8 +158,13 @@ class IMinPrinter implements IMinPrinterSDK {
     try {
       this.log(`Printing ${data.length} bytes...`)
       
-      // Convert to base64 for WebView bridge
-      const base64 = btoa(String.fromCharCode(...data))
+      // Avoid spreading large receipts into the call stack.
+      let binary = ''
+      const chunkSize = 0x8000
+      for (let offset = 0; offset < data.length; offset += chunkSize) {
+        binary += String.fromCharCode(...data.subarray(offset, offset + chunkSize))
+      }
+      const base64 = btoa(binary)
       const result = await window.IMinPrinter!.print(base64)
       
       if (result) {

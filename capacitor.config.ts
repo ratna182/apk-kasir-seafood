@@ -1,6 +1,6 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
-const serverUrl = process.env.CAPACITOR_SERVER_URL
+const serverUrl = process.env.CAPACITOR_SERVER_URL || 'https://kasir-seafood.vercel.app'
 
 if (serverUrl && !/^https:\/\//.test(serverUrl)) {
   throw new Error('CAPACITOR_SERVER_URL harus menggunakan HTTPS')

@@ -20,6 +20,7 @@ class UnifiedPrinter {
   private listeners: Set<StatusListener> = new Set()
   private currentStatus: PrinterStatus = 'idle'
   private lastError: string = ''
+  private printQueue: Promise<boolean> = Promise.resolve(true)
 
   get status(): PrinterStatus {
     return this.currentStatus
@@ -193,6 +194,26 @@ class UnifiedPrinter {
    * Print data using active printer
    */
   async print(data: Uint8Array): Promise<boolean> {
+    const job = this.printQueue.then(() => this.printNow(data))
+    this.printQueue = job.catch(() => false)
+    return job
+  }
+
+  private async printNow(data: Uint8Array): Promise<boolean> {
+    // The page can reload while the saved printer config remains available.
+    // Reconnect here instead of relying on a background effect finishing first.
+    if (!this.activePrinter) {
+      const saved = loadPrinterConfig()
+      if (!saved || !(await this.connect(saved))) {
+        this.logError('No printer connected')
+        return false
+      }
+    }
+
+    if (this.activePrinter === 'imin' && iminPrinter.status !== 'connected') {
+      if (!(await this.connectImin())) return false
+    }
+
     if (!this.activePrinter) {
       this.logError('No printer connected')
       return false

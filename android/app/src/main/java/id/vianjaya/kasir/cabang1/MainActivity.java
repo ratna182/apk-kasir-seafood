@@ -11,6 +11,8 @@ import com.imin.printer.INeoPrinterCallback;
 import com.imin.printer.InitPrinterCallback;
 import com.imin.printer.PrinterHelper;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends BridgeActivity {
@@ -87,7 +89,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
-        public boolean print(String base64Data) {
+        public synchronized boolean print(String base64Data) {
             if (!printerConnected.get()) {
                 // Try to reconnect before giving up
                 if (!isInitializing.get()) {
@@ -98,34 +100,50 @@ public class MainActivity extends BridgeActivity {
 
             try {
                 byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
+                CountDownLatch completed = new CountDownLatch(1);
+                AtomicBoolean success = new AtomicBoolean(false);
                 PrinterHelper.getInstance().sendRAWData(data, new INeoPrinterCallback() {
                     @Override
                     public void onRunResult(boolean isSuccess) {
+                        success.set(isSuccess);
                         if (!isSuccess) {
                             Log.w(TAG, "Print run failed");
                             printerConnected.set(false);
                         }
+                        completed.countDown();
                     }
 
                     @Override
                     public void onRaiseException(int code, String msg) {
                         Log.w(TAG, "Print exception: " + code + " - " + msg);
+                        success.set(false);
                         printerConnected.set(false);
+                        completed.countDown();
                     }
 
                     @Override
                     public void onPrintResult(int code, String msg) {
                         if (code != 1) {
                             Log.w(TAG, "Print result error: " + code + " - " + msg);
+                            success.set(false);
                             printerConnected.set(false);
                         }
+                        completed.countDown();
                     }
 
                     @Override
                     public void onReturnString(String result) {
                     }
                 });
-                return true;
+                if (!completed.await(10, TimeUnit.SECONDS)) {
+                    Log.w(TAG, "Print timed out");
+                    return false;
+                }
+                return success.get();
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                Log.e(TAG, "Print interrupted", error);
+                return false;
             } catch (IllegalArgumentException error) {
                 Log.e(TAG, "Base64 decode error", error);
                 return false;
