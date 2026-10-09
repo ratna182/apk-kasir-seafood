@@ -89,13 +89,6 @@ export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSet
     }
   }, [])
 
-  const handleUseWindowPrint = useCallback(() => {
-    setConfig(null)
-    clearPrinterConfig()
-    onConfigured(null)
-    onClose()
-  }, [onConfigured, onClose])
-
   if (!open) return null
 
   return (
@@ -180,9 +173,6 @@ export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSet
               </button>
             </div>
           )}
-          <button type="button" onClick={handleUseWindowPrint} style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary, #666)', fontWeight: 500, fontSize: '0.85rem', cursor: 'pointer' }}>
-            Gunakan Print Bawaan
-          </button>
         </div>
 
         <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'var(--color-text-muted, #999)', textAlign: 'center' }}>

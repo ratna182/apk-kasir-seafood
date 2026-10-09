@@ -104,8 +104,8 @@ export function encodeReceipt(
   parts.push(encodeLine(drawLine(w), true))
 
   for (const item of t.items) {
-    const price = formatRupiah(item.subtotal)
-    const nameLine = padRight(item.namaMenu, w - price.length) + price
+    const price = formatRupiah(item.subtotal).slice(-w)
+    const nameLine = padRight(item.namaMenu, Math.max(1, w - price.length)).slice(0, Math.max(1, w - price.length)) + price
     parts.push(encodeLine(nameLine, true))
 
     const detail = `${item.qty} X ${formatRupiah(item.hargaSatuan)}${item.diskonSatuan ? ` - diskon ${formatRupiah(item.diskonSatuan)}` : ''}`

@@ -1,4 +1,4 @@
-import type { PrinterConfig, PrinterStatus, PrinterConnectionType } from './types'
+import type { PrinterConfig, PrinterStatus, PrinterConnectionType, IMinPrintJobResult } from './types'
 import { printer as bluetoothPrinter } from './bluetooth'
 import { iminPrinter } from './imin-sdk'
 import { loadPrinterConfig, savePrinterConfig, clearPrinterConfig } from './storage'
@@ -199,6 +199,17 @@ class UnifiedPrinter {
     return job
   }
 
+  async printReceipt(data: Uint8Array, jobId: string): Promise<IMinPrintJobResult | boolean> {
+    if (this.activePrinter !== 'imin') {
+      const saved = loadPrinterConfig()
+      if (saved?.connectionType === 'imin' && !(await this.connectImin())) {
+        return { ok: false, status: 'failed', error: 'Printer iMin belum terhubung', attempts: 0 }
+      }
+    }
+    if (this.activePrinter === 'imin') return iminPrinter.printJob(jobId, data)
+    return this.print(data)
+  }
+
   private async printNow(data: Uint8Array): Promise<boolean> {
     // The page can reload while the saved printer config remains available.
     // Reconnect here instead of relying on a background effect finishing first.
@@ -226,79 +237,6 @@ class UnifiedPrinter {
     return bluetoothPrinter.write(data)
   }
 
-  /**
-   * Print receipt using ESC/POS commands
-   */
-  async printReceipt(receiptData: {
-    title?: string
-    items: Array<{ name: string; qty: number; price: number }>
-    total: number
-    payment?: string
-    footer?: string
-  }): Promise<boolean> {
-    const encoder = new TextEncoder()
-    const commands: Uint8Array[] = []
-    
-    // Initialize
-    commands.push(new Uint8Array([0x1B, 0x40])) // INIT
-    
-    // Title
-    if (receiptData.title) {
-      commands.push(new Uint8Array([0x1B, 0x61, 0x01])) // Center align
-      commands.push(new Uint8Array([0x1B, 0x45, 0x01])) // Bold on
-      commands.push(new Uint8Array([0x1D, 0x21, 0x11])) // Double size
-      commands.push(encoder.encode(receiptData.title))
-      commands.push(new Uint8Array([0x1D, 0x21, 0x00])) // Normal size
-      commands.push(new Uint8Array([0x1B, 0x45, 0x00])) // Bold off
-      commands.push(new Uint8Array([0x0A])) // Feed line
-    }
-    
-    // Items
-    commands.push(new Uint8Array([0x1B, 0x61, 0x00])) // Left align
-    for (const item of receiptData.items) {
-      const line = `${item.name} x${item.qty} @Rp${item.price.toLocaleString('id-ID')}`
-      commands.push(encoder.encode(line))
-      commands.push(new Uint8Array([0x0A]))
-    }
-    
-    // Separator
-    commands.push(encoder.encode('─'.repeat(32)))
-    commands.push(new Uint8Array([0x0A]))
-    
-    // Total
-    commands.push(new Uint8Array([0x1B, 0x45, 0x01])) // Bold on
-    commands.push(encoder.encode(`TOTAL: Rp${receiptData.total.toLocaleString('id-ID')}`))
-    commands.push(new Uint8Array([0x1B, 0x45, 0x00])) // Bold off
-    commands.push(new Uint8Array([0x0A]))
-    
-    // Payment
-    if (receiptData.payment) {
-      commands.push(encoder.encode(`Bayar: ${receiptData.payment}`))
-      commands.push(new Uint8Array([0x0A]))
-    }
-    
-    // Footer
-    if (receiptData.footer) {
-      commands.push(new Uint8Array([0x1B, 0x61, 0x01])) // Center align
-      commands.push(new Uint8Array([0x0A]))
-      commands.push(encoder.encode(receiptData.footer))
-      commands.push(new Uint8Array([0x0A]))
-    }
-    
-    // Cut immediately after the final line to avoid a large blank margin.
-    commands.push(new Uint8Array([0x1D, 0x56, 0x42, 0x00])) // Cut paper
-    
-    // Combine all commands
-    const totalLength = commands.reduce((acc, cmd) => acc + cmd.length, 0)
-    const combined = new Uint8Array(totalLength)
-    let offset = 0
-    for (const cmd of commands) {
-      combined.set(cmd, offset)
-      offset += cmd.length
-    }
-    
-    return this.print(combined)
-  }
 }
 
 export const printer = new UnifiedPrinter()

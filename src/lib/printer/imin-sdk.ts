@@ -1,4 +1,4 @@
-import type { PrinterConfig, PrinterStatus, IMinPrinterSDK } from './types'
+import type { PrinterConfig, PrinterStatus, IMinPrinterSDK, IMinPrintJobResult } from './types'
 
 type StatusListener = (status: PrinterStatus) => void
 
@@ -34,6 +34,7 @@ declare global {
       connect: () => Promise<boolean>
       disconnect: () => Promise<void>
       print: (base64Data: string) => Promise<boolean>
+      printJob?: (jobId: string, base64Data: string) => Promise<string> | string
       getStatus: () => Promise<string>
       isSupported: () => boolean
     }
@@ -75,7 +76,7 @@ class IMinPrinter implements IMinPrinterSDK {
 
   isSupported(): boolean {
     if (typeof window === 'undefined') return false
-    return !!window.IMinPrinter?.isSupported?.()
+    return !!window.IMinPrinter
   }
 
   async connect(): Promise<boolean> {
@@ -158,16 +159,8 @@ class IMinPrinter implements IMinPrinterSDK {
     try {
       this.log(`Printing ${data.length} bytes...`)
       
-      // Avoid spreading large receipts into the call stack.
-      let binary = ''
-      const chunkSize = 0x8000
-      for (let offset = 0; offset < data.length; offset += chunkSize) {
-        binary += String.fromCharCode(...data.subarray(offset, offset + chunkSize))
-      }
-      const base64 = btoa(binary)
-      const result = await window.IMinPrinter!.print(base64)
-      
-      if (result) {
+      const result = await this.printJob(`legacy-${Date.now()}`, data)
+      if (result.ok) {
         this.log('Print completed successfully')
         return true
       } else {
@@ -177,6 +170,33 @@ class IMinPrinter implements IMinPrinterSDK {
     } catch (e) {
       this.logError('Print error', e)
       return false
+    }
+  }
+
+  async printJob(jobId: string, data: Uint8Array): Promise<IMinPrintJobResult> {
+    if (!this.connected) {
+      return { ok: false, status: 'failed', error: 'Printer iMin belum terhubung', attempts: 0 }
+    }
+
+    try {
+      let binary = ''
+      for (let offset = 0; offset < data.length; offset += 8192) {
+        binary += String.fromCharCode(...data.subarray(offset, offset + 8192))
+      }
+      const base64 = btoa(binary)
+      const bridge = window.IMinPrinter
+      if (!bridge) return { ok: false, status: 'failed', error: 'Bridge IMinPrinter tidak tersedia di APK', attempts: 0 }
+      if (!bridge?.printJob) {
+        const ok = await bridge?.print(base64)
+        return { ok: !!ok, status: ok ? 'printed' : 'failed', error: ok ? null : 'Printer iMin gagal mencetak', attempts: 1 }
+      }
+      const raw = await bridge.printJob(jobId, base64)
+      const result = JSON.parse(raw) as IMinPrintJobResult
+      if (!result.ok) this.logError(result.error || `Print ${result.status}`)
+      return result
+    } catch (e) {
+      this.logError('Print error', e)
+      return { ok: false, status: 'failed', error: 'Bridge iMin tidak dapat memproses job', attempts: 0 }
     }
   }
 

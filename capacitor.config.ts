@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
   appId: process.env.CAPACITOR_APP_ID || 'id.vianjaya.kasir.cabang1',
   appName: process.env.CAPACITOR_APP_NAME || 'Kasir Vian Jaya 08',
   webDir: 'www',
-  server: serverUrl ? { url: serverUrl, androidScheme: 'https' } : undefined,
+  server: serverUrl ? { url: serverUrl, androidScheme: 'https', allowNavigation: ['kasir-seafood.vercel.app'] } : undefined,
   loggingBehavior: 'production',
 }
 

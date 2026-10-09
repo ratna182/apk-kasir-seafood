@@ -22,7 +22,7 @@ export function feedAndCut(lines: number = 3): Uint8Array {
 }
 
 export function setText(text: string): Uint8Array {
-  return textEncoder(text)
+  return textEncoder(text.normalize('NFKD').replace(/[^\x20-\x7E\n\r]/g, '?'))
 }
 
 export function setAlign(mode: 'left' | 'center' | 'right'): Uint8Array {

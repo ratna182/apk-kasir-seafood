@@ -108,21 +108,6 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     }
   }, [])
 
-  // Handle print with auto-retry via forceReconnect
-  const handlePrintWithRetry = useCallback(async (data: Uint8Array, retries = 2): Promise<boolean> => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const ok = await printer.print(data)
-      if (ok) return true
-      
-      if (attempt < retries) {
-        console.log(`Print attempt ${attempt + 1} failed, trying forceReconnect...`)
-        await printer.forceReconnect()
-        await new Promise(r => setTimeout(r, 1000))
-      }
-    }
-    return false
-  }, [])
-
   useEffect(() => {
     if (!qtyPickerMenuId) return
     const handler = () => setQtyPickerMenuId(null)
@@ -304,9 +289,11 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
         kembalian: kembalianResult?.kembalian
       })
 
-      const ok = await handlePrintWithRetry(encoded)
+      const jobId = `${completedTransaksi.id}-${Date.now()}`
+      const result = await printer.printReceipt(encoded, jobId)
+      const ok = typeof result === 'boolean' ? result : result.ok
       if (!ok) {
-        setError(printer.error || 'Gagal mencetak ke printer thermal')
+        setError(typeof result === 'boolean' ? printer.error || 'Gagal mencetak ke printer thermal' : `${result.error || 'Gagal mencetak'} (${result.status})`)
       } else {
         setSuccess('Struk terkirim ke printer')
       }
@@ -886,12 +873,14 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
               </ol>
             </div>
 
+            {error && <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>{error}</div>}
+
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button type="button" onClick={handleNewOrder} className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>
                 Pesanan Baru
               </button>
               <button type="button" id="btn-cetak-struk" onClick={handlePrintReceipt} disabled={printing} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', fontWeight: 700 }}>
-                <Printer size={16} /> {printing ? 'Mencetak...' : 'Cetak Struk'}
+                <Printer size={16} /> {printing ? 'Mencetak...' : error ? 'Coba lagi' : 'Cetak Struk'}
               </button>
             </div>
           </div>
