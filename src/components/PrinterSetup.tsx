@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { printer } from '../lib/printer'
 import { loadPrinterConfig, clearPrinterConfig } from '../lib/printer/storage'
 import type { PrinterConfig, PrinterStatus } from '../lib/printer/types'
@@ -173,6 +174,9 @@ export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSet
               </button>
             </div>
           )}
+          <Link href="/printer-test" onClick={onClose} style={{ display: 'block', width: '100%', marginTop: '0.5rem', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary, #666)', textAlign: 'center', fontWeight: 600, fontSize: '0.85rem', textDecoration: 'none' }}>
+            Buka Diagnostik Printer
+          </Link>
         </div>
 
         <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'var(--color-text-muted, #999)', textAlign: 'center' }}>
