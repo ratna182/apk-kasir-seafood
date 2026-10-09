@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { LayoutDashboard, BarChart3, UtensilsCrossed, Users, Plus, History, User, DollarSign, Activity } from 'lucide-react'
+import { LayoutDashboard, BarChart3, UtensilsCrossed, Users, Plus, History, User, DollarSign, Activity, Printer } from 'lucide-react'
 import LogoutButton from './LogoutButton'
 
 interface NavbarProps {
@@ -12,7 +12,7 @@ interface NavbarProps {
     username: string
     role: string
   }
-  activePage?: 'dashboard' | 'transaksi' | 'menu' | 'laporan' | 'riwayat' | 'kasir' | 'harga-warung' | 'activity-log'
+  activePage?: 'dashboard' | 'transaksi' | 'menu' | 'laporan' | 'riwayat' | 'kasir' | 'harga-warung' | 'activity-log' | 'printer-test'
 }
 
 export default function Navbar({ session, activePage }: NavbarProps) {
@@ -120,6 +120,14 @@ export default function Navbar({ session, activePage }: NavbarProps) {
               </Link>
             </>
           )}
+          <Link
+            href="/printer-test"
+            className={`btn btn-sm ${activePage === 'printer-test' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+          >
+            <Printer size={14} />
+            Printer Test
+          </Link>
         </div>
 
         <div className="navbar-actions" style={{ marginLeft: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
