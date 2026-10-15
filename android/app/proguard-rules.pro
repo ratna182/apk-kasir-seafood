@@ -11,6 +11,7 @@
 # Keep Capacitor / iMin printer classes
 -keep class com.getcapacitor.** { *; }
 -keep class com.github.iminsoftware.** { *; }
+-keep class com.imin.** { *; }
 
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
