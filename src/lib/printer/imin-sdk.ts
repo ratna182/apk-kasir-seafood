@@ -36,6 +36,7 @@ declare global {
       print: (base64Data: string) => Promise<boolean>
       printJob?: (jobId: string, base64Data: string) => Promise<string> | string
       getStatus: () => Promise<string>
+      getDiagnostics?: () => Promise<string> | string
       isSupported: () => boolean
     }
   }
@@ -211,6 +212,16 @@ class IMinPrinter implements IMinPrinterSDK {
       return mappedStatus
     } catch {
       return 'error'
+    }
+  }
+
+  async getDiagnostics(): Promise<string | null> {
+    try {
+      const raw = await window.IMinPrinter?.getDiagnostics?.()
+      return raw || null
+    } catch (error) {
+      this.logError('Diagnostics failed', error)
+      return null
     }
   }
 

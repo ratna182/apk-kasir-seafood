@@ -8,6 +8,8 @@ import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 
 import com.getcapacitor.BridgeWebViewClient;
 import com.getcapacitor.BridgeActivity;
@@ -28,6 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends BridgeActivity {
     private static final String TAG = "IMinPrinter";
+    private static final String SERVICE_PACKAGE = "com.imin.printerservice";
+    private static final String SERVICE_CLASS = "com.imin.printerservice.core.ApiAdapterManager.NeoPrinterService";
+    private static final String SERVICE_ACTION = "com.imin.printerservice.NeoPrinterService";
     private static final String NAV_TAG = "NavTrace";
     private final AtomicBoolean printerConnected = new AtomicBoolean(false);
     private final AtomicBoolean isInitializing = new AtomicBoolean(false);
@@ -36,6 +41,13 @@ public class MainActivity extends BridgeActivity {
     private final Map<String, Long> recentJobTimes = new ConcurrentHashMap<>();
     private final Map<String, Boolean> processingJobs = new ConcurrentHashMap<>();
     private CountDownLatch connectionLatch;
+    private volatile Boolean bindResult;
+    private volatile boolean servicePackageInstalled;
+    private volatile String servicePackageVersion;
+    private volatile String diagnosticStage = "check-package";
+    private volatile String diagnosticErrorClass = "";
+    private volatile String diagnosticErrorMessage = "";
+    private volatile Integer diagnosticStatusCode;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -75,27 +87,81 @@ public class MainActivity extends BridgeActivity {
     private void initPrinterService() {
         if (isInitializing.getAndSet(true)) return;
         connectionLatch = new CountDownLatch(1);
-        Log.d(TAG, "Initializing printer service");
+        checkServicePackage();
+        if (!servicePackageInstalled) {
+            isInitializing.set(false);
+            connectionLatch.countDown();
+            return;
+        }
+        diagnosticStage = "bind";
+        diagnosticErrorClass = "";
+        diagnosticErrorMessage = "";
+        Log.d(TAG, "bind package=" + SERVICE_PACKAGE + " class=" + SERVICE_CLASS + " action=" + SERVICE_ACTION);
         try {
-            PrinterHelper.getInstance().initPrinterService(this, new InitPrinterCallback() {
+            bindResult = PrinterHelper.getInstance().initPrinterService(this, new InitPrinterCallback() {
                 @Override public void onConnected() {
-                    printerConnected.set(true); isInitializing.set(false);
+                    diagnosticStage = "wait-connect";
+                    diagnosticStatusCode = PrinterHelper.getInstance().getPrinterStatus();
+                    Log.d(TAG, "onServiceConnected status=" + diagnosticStatusCode + " text=" + statusText(diagnosticStatusCode));
+                    printerConnected.set(diagnosticStatusCode == 0); isInitializing.set(false);
+                    if (!printerConnected.get()) {
+                        diagnosticStage = "status";
+                        diagnosticErrorClass = "printer-status";
+                        diagnosticErrorMessage = statusText(diagnosticStatusCode);
+                    }
                     if (connectionLatch != null) connectionLatch.countDown();
-                    Log.d(TAG, "Printer service connected");
                 }
                 @Override public void onDisconnected() {
                     printerConnected.set(false); isInitializing.set(false);
+                    diagnosticStage = "wait-connect";
+                    diagnosticErrorClass = "service-disconnected";
+                    diagnosticErrorMessage = "Printer service disconnected";
                     if (connectionLatch != null) connectionLatch.countDown();
-                    Log.d(TAG, "Printer service disconnected");
+                    Log.w(TAG, "onServiceDisconnected");
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         if (!printerConnected.get() && !isInitializing.get()) initPrinterService();
                     }, 3000);
                 }
             });
-        } catch (Exception error) {
+            Log.d(TAG, "bind result=" + bindResult);
+            if (!bindResult) {
+                diagnosticErrorClass = "bind-rejected";
+                diagnosticErrorMessage = "bindService returned false";
+                isInitializing.set(false);
+                connectionLatch.countDown();
+            }
+        } catch (SecurityException error) {
+            bindResult = false;
+            diagnosticErrorClass = "security-exception";
+            diagnosticErrorMessage = error.getMessage() == null ? error.toString() : error.getMessage();
             isInitializing.set(false);
-            if (connectionLatch != null) connectionLatch.countDown();
-            Log.e(TAG, "Printer init failed", error);
+            connectionLatch.countDown();
+            Log.e(TAG, "error stage=bind", error);
+        } catch (Exception error) {
+            bindResult = false;
+            diagnosticErrorClass = error.getClass().getSimpleName();
+            diagnosticErrorMessage = error.getMessage() == null ? error.toString() : error.getMessage();
+            isInitializing.set(false);
+            connectionLatch.countDown();
+            Log.e(TAG, "error stage=bind", error);
+        }
+    }
+
+    private void checkServicePackage() {
+        diagnosticStage = "check-package";
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(SERVICE_PACKAGE, 0);
+            servicePackageInstalled = true;
+            servicePackageVersion = info.versionName;
+            diagnosticErrorClass = "";
+            diagnosticErrorMessage = "";
+            Log.d(TAG, "check-package installed=true version=" + servicePackageVersion);
+        } catch (PackageManager.NameNotFoundException error) {
+            servicePackageInstalled = false;
+            servicePackageVersion = null;
+            diagnosticErrorClass = "package-not-installed";
+            diagnosticErrorMessage = "Package " + SERVICE_PACKAGE + " tidak terpasang";
+            Log.e(TAG, "error stage=check-package " + diagnosticErrorMessage);
         }
     }
 
@@ -105,6 +171,12 @@ public class MainActivity extends BridgeActivity {
             CountDownLatch latch = connectionLatch;
             if (latch != null) latch.await(3, TimeUnit.SECONDS);
         }
+        if (!printerConnected.get() && isInitializing.get()) {
+            diagnosticStage = "wait-connect";
+            diagnosticErrorClass = "connection-timeout";
+            diagnosticErrorMessage = "onServiceConnected tidak datang dalam 3 detik";
+            Log.e(TAG, "error stage=wait-connect " + diagnosticErrorMessage);
+        }
         return printerConnected.get();
     }
 
@@ -112,6 +184,14 @@ public class MainActivity extends BridgeActivity {
         try {
             JSONObject json = new JSONObject();
             json.put("ok", ok); json.put("status", status); json.put("error", error == null ? JSONObject.NULL : error); json.put("attempts", attempts);
+            json.put("stage", diagnosticStage);
+            json.put("errorClass", error == null ? diagnosticErrorClass : (diagnosticErrorClass.isEmpty() ? "printer-error" : diagnosticErrorClass));
+            json.put("errorMessage", error == null ? diagnosticErrorMessage : error);
+            json.put("bindResult", bindResult == null ? JSONObject.NULL : bindResult);
+            json.put("servicePackageInstalled", servicePackageInstalled);
+            json.put("servicePackageVersion", servicePackageVersion == null ? JSONObject.NULL : servicePackageVersion);
+            json.put("statusCode", diagnosticStatusCode == null ? JSONObject.NULL : diagnosticStatusCode);
+            json.put("statusText", statusText(diagnosticStatusCode));
             return json.toString();
         } catch (Exception ignored) { return "{\"ok\":false,\"status\":\"failed\",\"error\":\"result error\",\"attempts\":0}"; }
     }
@@ -122,6 +202,11 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface public boolean connect() {
             try { if (!printerConnected.get() && !isInitializing.get()) initPrinterService(); return printerConnected.get(); }
             catch (Exception error) { Log.e(TAG, "connect failed", error); return false; }
+        }
+
+        @JavascriptInterface public String getDiagnostics() {
+            try { return diagnostics(); }
+            catch (Exception error) { Log.e(TAG, "error stage=status", error); return result(false, "error", error.toString(), 0); }
         }
 
         @JavascriptInterface public void disconnect() {
@@ -192,8 +277,31 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface public String getStatus() {
-            try { return !printerConnected.get() ? "idle" : PrinterHelper.getInstance().getPrinterStatus() == 0 ? "connected" : "error"; }
+            try {
+                diagnosticStatusCode = PrinterHelper.getInstance().getPrinterStatus();
+                Log.d(TAG, "status code=" + diagnosticStatusCode + " text=" + statusText(diagnosticStatusCode));
+                return !printerConnected.get() ? "idle" : diagnosticStatusCode == 0 ? "connected" : "error";
+            }
             catch (Exception error) { Log.e(TAG, "status failed", error); return "error"; }
         }
+    }
+
+    private String statusText(Integer status) {
+        if (status == null) return "unknown";
+        switch (status) {
+            case 0: return "normal";
+            case -1:
+            case 1: return "tidak terhubung/mati";
+            case 3: return "print head terbuka";
+            case 7: return "kertas habis";
+            case 8: return "kertas hampir habis";
+            default: return "error lain";
+        }
+    }
+
+    private String diagnostics() {
+        diagnosticStatusCode = PrinterHelper.getInstance().getPrinterStatus();
+        Log.d(TAG, "status code=" + diagnosticStatusCode + " text=" + statusText(diagnosticStatusCode));
+        return result(printerConnected.get(), statusText(diagnosticStatusCode), diagnosticErrorMessage.isEmpty() ? null : diagnosticErrorMessage, 0);
     }
 }

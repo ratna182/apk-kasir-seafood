@@ -16,13 +16,15 @@ export default function PrinterTestPage() {
     const nextStatus = await iminPrinter.getStatus()
     setStatus(nextStatus)
     addLog(`connect ok=${connected} status=${nextStatus}`)
+    const diagnostics = await iminPrinter.getDiagnostics()
+    if (diagnostics) addLog(`diagnostics ${diagnostics}`)
   }
 
   async function printTest() {
     const jobId = `printer-test-${Date.now()}`
     const data = compose(initPrinter(), setAlign('center'), setBold(true), setText('IMIN PRINTER TEST\n'), setBold(false), setAlign('left'), setText(`${drawLine(32)}\n`), setText('Kolom kiri                 Rp 10.000\n'), setText('Qty 2                      Rp 20.000\n'), setText(`${drawLine(32)}\nTOTAL                      Rp 30.000\n`), feedAndCut(3))
     const result = await printer.printReceipt(data, jobId)
-    const text = typeof result === 'boolean' ? `ok=${result}` : `job=${jobId} attempts=${result.attempts} status=${result.status} error=${result.error || '-'}`
+    const text = typeof result === 'boolean' ? `ok=${result}` : `job=${jobId} ${JSON.stringify(result)}`
     setLogs((current) => [text, ...current].slice(0, 20))
   }
 

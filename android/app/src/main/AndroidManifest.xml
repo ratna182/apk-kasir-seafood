@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <queries>
+        <package android:name="com.imin.printerservice" />
+        <intent>
+            <action android:name="com.imin.printerservice.NeoPrinterService" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:usesCleartextTraffic="true"
