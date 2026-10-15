@@ -209,6 +209,19 @@ public class MainActivity extends BridgeActivity {
             catch (Exception error) { Log.e(TAG, "error stage=status", error); return result(false, "error", error.toString(), 0); }
         }
 
+        @JavascriptInterface public String getAppVersion() {
+            try {
+                PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+                JSONObject json = new JSONObject();
+                json.put("versionName", info.versionName);
+                json.put("versionCode", info.versionCode);
+                return json.toString();
+            } catch (Exception error) {
+                Log.e(TAG, "app version failed", error);
+                return "{\"versionName\":null,\"versionCode\":null}";
+            }
+        }
+
         @JavascriptInterface public void disconnect() {
             try { printerConnected.set(false); } catch (Exception error) { Log.e(TAG, "disconnect failed", error); }
         }

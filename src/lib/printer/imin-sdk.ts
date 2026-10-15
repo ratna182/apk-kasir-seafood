@@ -37,6 +37,7 @@ declare global {
       printJob?: (jobId: string, base64Data: string) => Promise<string> | string
       getStatus: () => Promise<string>
       getDiagnostics?: () => Promise<string> | string
+      getAppVersion?: () => Promise<string> | string
       isSupported: () => boolean
     }
   }
@@ -221,6 +222,16 @@ class IMinPrinter implements IMinPrinterSDK {
       return raw || null
     } catch (error) {
       this.logError('Diagnostics failed', error)
+      return null
+    }
+  }
+
+  async getAppVersion(): Promise<string | null> {
+    try {
+      const raw = await window.IMinPrinter?.getAppVersion?.()
+      return raw || null
+    } catch (error) {
+      this.logError('App version failed', error)
       return null
     }
   }

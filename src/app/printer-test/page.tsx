@@ -1,15 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { printer } from '@/lib/printer'
 import { iminPrinter } from '@/lib/printer/imin-sdk'
 import { compose, drawLine, feedAndCut, initPrinter, setAlign, setBold, setText } from '@/lib/printer/escpos'
 
 export default function PrinterTestPage() {
   const [status, setStatus] = useState('idle')
+  const [appVersion, setAppVersion] = useState<string | null>(null)
   const [logs, setLogs] = useState<string[]>([])
 
   const addLog = (message: string) => setLogs((current) => [`${new Date().toLocaleTimeString()} ${message}`, ...current].slice(0, 20))
+
+  useEffect(() => {
+    iminPrinter.getAppVersion().then(setAppVersion)
+  }, [])
 
   async function connect() {
     const connected = await printer.connectImin()
@@ -30,6 +35,7 @@ export default function PrinterTestPage() {
 
   return <main style={{ maxWidth: 640, margin: '2rem auto', padding: '1rem' }}>
     <h1>Printer Test</h1>
+    <p>APK: <strong>{appVersion || 'Web/browser'}</strong></p>
     <p>Status: <strong>{status}</strong></p>
     <div style={{ display: 'flex', gap: 8 }}>
       <button type="button" onClick={connect}>Connect</button>
