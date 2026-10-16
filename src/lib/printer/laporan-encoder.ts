@@ -1,12 +1,12 @@
 import { CHAR_WIDTHS } from './types'
+import { loadReceiptLogo } from './logo'
+import { centerText, createWriter, placeColumns, rightText } from './layout'
 import {
   initPrinter,
   feedAndCut,
-  setText,
   setAlign,
-  setBold,
-  setFontSize,
   setLineSpacing,
+  setFontSize,
   compose,
   padRight,
   drawLine,
@@ -47,143 +47,174 @@ export interface LaporanData {
   aktivitasKasir: LaporanAktivitasKasir[]
 }
 
-function centerText(text: string, width: number): string {
-  if (text.length >= width) return text.slice(0, width)
-  const pad = Math.floor((width - text.length) / 2)
-  return ' '.repeat(pad) + text
+function clock(iso: string | null | undefined): string {
+  if (!iso) return '-'
+  return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }
 
-function encodeLine(text: string, bold: boolean = true, align: 'left' | 'center' | 'right' = 'left', fontSize: 1 | 2 = 1): Uint8Array {
-  const parts: Uint8Array[] = []
-  parts.push(setBold(bold))
-  if (align !== 'left') parts.push(setAlign(align))
-  if (fontSize > 1) parts.push(setFontSize(fontSize, fontSize))
-  parts.push(setText(text + '\n'))
-  if (fontSize > 1) parts.push(setFontSize(1, 1))
-  if (align !== 'left') parts.push(setAlign('left'))
-  return compose(...parts)
+function metodeLabel(method: string): string {
+  if (method === 'QRIS') return 'QRIS'
+  if (method === 'TRANSFER') return 'TRSF'
+  return 'CASH'
 }
 
-export function encodeLaporan(
+function rupiah(amount: number): string {
+  return `Rp ${amount.toLocaleString('id-ID')}`
+}
+
+export async function encodeLaporan(
   data: LaporanData,
   cashierName: string,
   warungAlamat: string | null,
   width: '58mm' | '80mm',
-  kasirSesi?: { ditutupPada: string; ditutupOleh: string } | null,
-): Uint8Array {
+  kasirSesi?: { dibukaPada?: string | null; ditutupPada: string; ditutupOleh: string } | null,
+): Promise<Uint8Array> {
   const w = CHAR_WIDTHS[width]
+  const { emit, center } = createWriter(w)
   const parts: Uint8Array[] = []
 
   parts.push(initPrinter())
   parts.push(setLineSpacing(20))
   parts.push(setFontSize(1, 1))
 
-  // Header sama seperti struk customer
-  parts.push(encodeLine(centerText('Seafood 08 Vian Jaya', w), true, 'center', 2))
-  if (warungAlamat) {
-    parts.push(encodeLine(centerText(warungAlamat, w), true, 'center'))
+  const logo = await loadReceiptLogo(w)
+  if (logo) {
+    parts.push(setAlign('center'))
+    parts.push(logo)
+    parts.push(setAlign('left'))
   }
-  parts.push(encodeLine(centerText('IG : Seafood08vianjaya.id', w), true, 'center'))
-  parts.push(encodeLine(centerText('FB : Seafood08vianjaya', w), true, 'center'))
-  parts.push(encodeLine(centerText('TT : Seafood08vianjaya', w), true, 'center'))
 
-  parts.push(encodeLine(drawLine(w), true))
+  if (warungAlamat && !data.warung.nama) parts.push(center(warungAlamat))
+  parts.push(center('IG : Seafood08vianjaya.id'))
+  parts.push(center('FB : Seafood08vianjaya'))
+  parts.push(center('TT : Seafood08vianjaya'))
 
-  parts.push(encodeLine(centerText('LAPORAN PENJUALAN HARIAN', w), true, 'center', 2))
+  parts.push(emit(drawLine(w)))
+  parts.push(center('LAPORAN PENJUALAN HARIAN'))
+  parts.push(emit(drawLine(w)))
 
-  parts.push(encodeLine(drawLine(w), true))
-
-  parts.push(encodeLine(`Tanggal : ${data.tanggal}`, true))
-  parts.push(encodeLine(`Dicetak : ${new Date().toLocaleTimeString('id-ID')}`, true))
-  parts.push(encodeLine(`Kasir   : ${cashierName}`, true))
-
+  parts.push(center(`Tanggal: ${data.tanggal}`))
+  parts.push(center(`Cabang: ${data.warung.nama || warungAlamat || '-'}`))
   if (kasirSesi) {
-    parts.push(encodeLine('Status  : SUDAH DITUTUP', true))
-    parts.push(encodeLine(`Pkl     : ${new Date(kasirSesi.ditutupPada).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`, true))
+    parts.push(center('Status: SUDAH DITUTUP'))
+    parts.push(center(`Pkl: ${clock(kasirSesi.ditutupPada)}`))
   }
 
-  parts.push(encodeLine(drawLine(w), true))
-  parts.push(encodeLine(centerText('AKTIVITAS KASIR', w), true, 'center'))
-  parts.push(encodeLine(drawLine(w), true))
-  if (data.aktivitasKasir.length === 0) {
-    parts.push(encodeLine('Tidak ada aktivitas', true))
-  } else {
-    for (const aktivitas of data.aktivitasKasir) {
-      const jenis = aktivitas.aktivitas === 'LOGIN'
-        ? 'LOGIN KASIR'
-        : aktivitas.aktivitas === 'BUKA_KASIR'
-          ? 'BUKA KASIR'
-          : 'TUTUP KASIR'
-      parts.push(encodeLine(`${new Date(aktivitas.waktu).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} ${jenis}`, true))
-      parts.push(encodeLine(`Kasir: ${aktivitas.kasir}`, true))
-      if (aktivitas.detail) parts.push(encodeLine(aktivitas.detail, true))
+  parts.push(emit(drawLine(w)))
+  parts.push(center('DAFTAR TRANSAKSI'))
+  parts.push(emit(drawLine(w)))
+
+  const mejaStart = 0
+  const waktuStart = Math.round(w * 0.27)
+  const metodeStart = Math.round(w * 0.55)
+  parts.push(
+    emit(
+      placeColumns(
+        [
+          { text: 'MEJA', start: mejaStart },
+          { text: 'WAKTU', start: waktuStart },
+          { text: 'METODE', start: metodeStart },
+          { text: 'TOTAL', end: w },
+        ],
+        w,
+      ).line,
+    ),
+  )
+  parts.push(emit(drawLine(w)))
+
+  for (const tx of data.transaksi) {
+    parts.push(
+      emit(
+        placeColumns(
+          [
+            { text: tx.nomorMeja, start: mejaStart },
+            { text: clock(tx.createdAt), start: waktuStart },
+            { text: metodeLabel(tx.metodePembayaran), start: metodeStart },
+            { text: tx.total.toLocaleString('id-ID'), end: w },
+          ],
+          w,
+        ).line,
+      ),
+    )
+  }
+
+  parts.push(emit(drawLine(w)))
+  parts.push(center('DETAIL KASIR'))
+  parts.push(emit(drawLine(w)))
+
+  const labelWidth = Math.max(1, Math.floor(w * 0.72))
+  const bukaWaktu = data.aktivitasKasir.find((item) => item.aktivitas === 'BUKA_KASIR')?.waktu
+  const kasirRow = (label: string, waktu: string | null | undefined) =>
+    emit(padRight(centerText(label, labelWidth), labelWidth) + clock(waktu).padStart(w - labelWidth))
+  parts.push(kasirRow('Buka Kasir', bukaWaktu ?? kasirSesi?.dibukaPada))
+  parts.push(kasirRow('Tutup Kasir', kasirSesi?.ditutupPada))
+
+  parts.push(emit(drawLine(w)))
+  parts.push(center('REKAP MENU'))
+  parts.push(emit(drawLine(w)))
+
+  const qtyEnd = w - Math.max(9, Math.floor(w * 0.22))
+  parts.push(
+    emit(
+      placeColumns(
+        [
+          { text: 'MENU', start: 1 },
+          { text: 'QTY', end: qtyEnd },
+          { text: 'TOTAL', end: w },
+        ],
+        w,
+      ).line,
+    ),
+  )
+  parts.push(emit(drawLine(w)))
+
+  // One column of indent, one gap, and the QTY header needs three columns of its own.
+  const nameWidth = Math.max(1, qtyEnd - 4)
+  for (const item of data.rekap) {
+    const qty = String(item.qtyTotal)
+    const total = item.pendapatanTotal.toLocaleString('id-ID')
+    if (item.namaMenu.length <= nameWidth) {
+      parts.push(
+        emit(
+          placeColumns(
+            [
+              { text: item.namaMenu, start: 1 },
+              { text: qty, end: qtyEnd },
+              { text: total, end: w },
+            ],
+            w,
+          ).line,
+        ),
+      )
+    } else {
+      // The name has no room left, so qty and total move to their own line rather than colliding.
+      parts.push(emit(item.namaMenu))
+      parts.push(emit(rightText(`${qty} ${total}`, w)))
     }
   }
 
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
+  parts.push(center('TOTAL PER METODE BAYAR'))
+  parts.push(emit(drawLine(w)))
+  parts.push(emit(padRight('CASH', w - rupiah(data.totalCash).length) + rupiah(data.totalCash)))
+  parts.push(emit(padRight('QRIS', w - rupiah(data.totalQRIS).length) + rupiah(data.totalQRIS)))
+  parts.push(emit(padRight('TRANSFER', w - rupiah(data.totalTransfer).length) + rupiah(data.totalTransfer)))
 
-  // Daftar transaksi dengan metode bayar
-  parts.push(encodeLine(centerText('DAFTAR TRANSAKSI', w), true, 'center'))
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
+  parts.push(emit('Total Qty:' + `${data.grandTotalQty} item`.padStart(w - 'Total Qty:'.length)))
+  parts.push(emit('Total Transaksi:' + `${data.jumlahTransaksi} transaksi`.padStart(w - 'Total Transaksi:'.length)))
 
-  for (const tx of data.transaksi) {
-    const metode = tx.metodePembayaran === 'QRIS' ? 'QRIS' : tx.metodePembayaran === 'TRANSFER' ? 'TRSF' : 'CASH'
-    const time = new Date(tx.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-    const totalStr = `Rp ${tx.total.toLocaleString('id-ID')}`
-    const label = `${tx.nomorMeja} ${time} [${metode}]`
-    const leftWidth = w - totalStr.length - 1
-    parts.push(encodeLine(padRight(label, Math.max(1, leftWidth)) + totalStr, true))
-  }
+  parts.push(
+    emit(
+      centerText('GRAND TOTAL:', Math.floor(w / 2)) + rupiah(data.grandTotalPendapatan).padStart(w - Math.floor(w / 2)),
+      { scale: 2 },
+    ),
+  )
 
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
+  parts.push(center('*** REKAPITULASI RESMI ***'))
+  parts.push(center(cashierName || 'Kasir Vian Jaya 08'))
 
-  // Rekap per menu
-  parts.push(encodeLine(centerText('REKAP MENU', w), true, 'center'))
-  parts.push(encodeLine(drawLine(w), true))
-
-  for (const item of data.rekap) {
-    const qtyStr = String(item.qtyTotal)
-    const totalStr = `Rp ${item.pendapatanTotal.toLocaleString('id-ID')}`
-    const leftWidth = w - qtyStr.length - totalStr.length - 2
-    const nameLine = padRight(item.namaMenu, Math.max(1, leftWidth)) + qtyStr + ' ' + totalStr
-    parts.push(encodeLine(nameLine, true))
-  }
-
-  parts.push(encodeLine(drawLine(w), true))
-
-  // Total per metode bayar
-  parts.push(encodeLine(centerText('TOTAL PER METODE BAYAR', w), true, 'center'))
-  const cashStr = `Rp ${data.totalCash.toLocaleString('id-ID')}`
-  const qrisStr = `Rp ${data.totalQRIS.toLocaleString('id-ID')}`
-  const trsfStr = `Rp ${data.totalTransfer.toLocaleString('id-ID')}`
-  parts.push(encodeLine(padRight('CASH', Math.max(1, w - cashStr.length)) + cashStr, true))
-  parts.push(encodeLine(padRight('QRIS', Math.max(1, w - qrisStr.length)) + qrisStr, true))
-  parts.push(encodeLine(padRight('TRANSFER', Math.max(1, w - trsfStr.length)) + trsfStr, true))
-
-  parts.push(encodeLine(drawLine(w), true))
-
-  const gtyStr = String(data.grandTotalQty)
-  const gtpStr = `Rp ${data.grandTotalPendapatan.toLocaleString('id-ID')}`
-  const gLeft = w - gtyStr.length - gtpStr.length - 2
-  parts.push(encodeLine(padRight('TOTAL QTY', Math.max(1, gLeft)) + gtyStr + ' ' + gtpStr, true))
-
-  const jmlStr = `${data.jumlahTransaksi} transaksi`
-  const jLeft = w - jmlStr.length
-  parts.push(encodeLine(padRight('TOTAL TRANSAKSI', Math.max(1, jLeft)) + jmlStr, true))
-
-  parts.push(encodeLine(drawLine(w), true))
-
-  const gtLabel = 'GRAND TOTAL'
-  const gtVal = `Rp ${data.grandTotalPendapatan.toLocaleString('id-ID')}`
-  const gtLeft = w - gtLabel.length - gtVal.length
-  parts.push(encodeLine(padRight(gtLabel, Math.max(1, gtLeft)) + gtVal, true, 'left', 2))
-
-  parts.push(encodeLine(drawLine(w), true))
-
-  parts.push(encodeLine(centerText('*** REKAPITULASI RESMI ***', w), true, 'center'))
-  parts.push(encodeLine(centerText('Kasir Vian Jaya 08', w), true, 'center'))
-
-  // Cut immediately after the final line; the iMin cutter already handles its minimum feed.
   parts.push(setLineSpacing(20))
   parts.push(feedAndCut(0))
 

@@ -191,7 +191,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
     setPrinting(true)
     try {
       const data = buildLaporanData()
-      const encoded = encodeLaporan(data, sesi.ditutupOleh, sesi.warungAlamat, printerWidth, { ditutupPada: sesi.ditutupPada, ditutupOleh: sesi.ditutupOleh })
+      const encoded = await encodeLaporan(data, sesi.ditutupOleh, sesi.warungAlamat, printerWidth, { ditutupPada: sesi.ditutupPada, ditutupOleh: sesi.ditutupOleh })
       const success = await handlePrintWithRetry(encoded)
       if (success) {
         alert('Laporan berhasil dicetak.')

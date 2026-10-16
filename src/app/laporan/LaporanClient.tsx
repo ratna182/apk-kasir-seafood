@@ -247,7 +247,7 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
     }
     setPrinting(true)
     try {
-      const encoded = encodeLaporan(data, currentWarungNama, data.warung.alamat ?? null, printerWidth, kasirSesi)
+      const encoded = await encodeLaporan(data, currentWarungNama, data.warung.alamat ?? null, printerWidth, kasirSesi)
       const success = await handlePrintWithRetry(encoded)
       if (success) {
         setFeedback({ type: 'success', message: 'Laporan berhasil dicetak.' })

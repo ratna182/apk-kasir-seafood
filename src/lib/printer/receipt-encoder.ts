@@ -1,12 +1,10 @@
 import { CHAR_WIDTHS } from './types'
 import { loadReceiptLogo } from './logo'
+import { createWriter } from './layout'
 import {
   initPrinter,
   feedAndCut,
-  setText,
   setAlign,
-  setBold,
-  setFontSize,
   setLineSpacing,
   compose,
   padRight,
@@ -15,6 +13,7 @@ import {
   setCharset,
   setCodePage,
   setPrintDensity,
+  setFontSize,
 } from './escpos'
 
 export interface ReceiptTransaction {
@@ -33,75 +32,6 @@ export interface ReceiptTransaction {
   }>
 }
 
-type Align = 'left' | 'center' | 'right'
-type Scale = 1 | 2
-
-/** Double-width text occupies two columns per character, so it only fits at half the width. */
-function fitScale(text: string, width: number, requested: Scale): Scale {
-  if (requested === 1) return 1
-  return text.length * 2 <= width ? 2 : 1
-}
-
-function centerText(text: string, width: number, scale: Scale = 1): string {
-  const columns = Math.max(1, Math.floor(width / scale))
-  if (text.length >= columns) return text.slice(0, columns)
-  return ' '.repeat(Math.floor((columns - text.length) / 2)) + text
-}
-
-function rightText(text: string, width: number, scale: Scale = 1): string {
-  const columns = Math.max(1, Math.floor(width / scale))
-  if (text.length >= columns) return text.slice(0, columns)
-  return ' '.repeat(columns - text.length) + text
-}
-
-function wrapText(text: string, width: number): string[] {
-  const columns = Math.max(1, width)
-  if (text.length <= columns) return [text]
-  const lines: string[] = []
-  let rest = text
-  while (rest.length > columns) {
-    lines.push(rest.slice(0, columns))
-    rest = rest.slice(columns)
-  }
-  if (rest.length > 0) lines.push(rest)
-  return lines
-}
-
-function createWriter(width: number) {
-  const emit = (
-    text: string,
-    options: { bold?: boolean; align?: Align; scale?: Scale } = {},
-  ): Uint8Array => {
-    const bold = options.bold ?? true
-    const align = options.align ?? 'left'
-    const requested = options.scale ?? 1
-    // Double width that overflows the paper drops to double height so the line stays emphatic.
-    const fontWidth = fitScale(text, width, requested)
-    const fontHeight = requested === 2 ? 2 : 1
-    const parts: Uint8Array[] = []
-    for (const chunk of wrapText(text, Math.max(1, Math.floor(width / fontWidth)))) {
-      parts.push(setBold(bold))
-      if (align !== 'left') parts.push(setAlign(align))
-      if (fontHeight > 1) parts.push(setFontSize(fontWidth, fontHeight))
-      parts.push(setText(chunk + '\n'))
-      if (fontHeight > 1) parts.push(setFontSize(1, 1))
-      if (align !== 'left') parts.push(setAlign('left'))
-    }
-    return compose(...parts)
-  }
-
-  const center = (text: string, options: { bold?: boolean; scale?: Scale } = {}): Uint8Array => {
-    const scale = fitScale(text, width, options.scale ?? 1)
-    return emit(centerText(text, width, scale), { ...options, align: 'center', scale })
-  }
-
-  const right = (text: string, options: { bold?: boolean; scale?: Scale } = {}): Uint8Array => {
-    const scale = fitScale(text, width, options.scale ?? 1)
-    return emit(rightText(text, width, scale), { ...options, align: 'right', scale })
-  }
-
-  return { emit, center, right }
-}
 
 export async function encodeReceipt(
   data: {
