@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
 import { getKasirSessionState } from '@/lib/kasir-session'
+import { getStoreDateKey } from '@/lib/time'
 
 // GET /api/laporan/harian — rekap penjualan hari ini per menu
 // Query params: warung_id (required untuk owner, optional untuk kasir)
@@ -32,14 +33,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
     }
 
-    const kasirId = context.user.id
-    const state = await getKasirSessionState(prisma, warungId, kasirId)
+    const isOwnerView = isOwner(context)
+    const kasirId = isOwnerView ? null : context.user.id
+    const state = await getKasirSessionState(prisma, warungId, context.user.id)
 
     const transaksis = await prisma.transaksi.findMany({
       where: {
         warungId,
-        kasirId,
-        createdAt: { gte: state.sessionStart, lte: state.sessionEnd },
+        // The owner sees the whole outlet, so transactions from every cashier are included.
+        ...(kasirId ? { kasirId } : {}),
+        createdAt: { gte: state.dayStart, lt: state.dayEnd },
         status: 'SELESAI',
       },
       include: {
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
     const aktivitasKasir = await prisma.activityLog.findMany({
       where: {
         warungId,
-        userId: kasirId,
+        ...(kasirId ? { userId: kasirId } : {}),
         createdAt: { gte: state.today, lt: state.tomorrow },
         aktivitas: { in: ['LOGIN', 'BUKA_KASIR', 'TUTUP_KASIR'] },
       },
@@ -124,7 +127,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        tanggal: state.today.toISOString().split('T')[0],
+        tanggal: getStoreDateKey(),
         warung,
         rekap,
         transaksi: transaksis.map(t => ({

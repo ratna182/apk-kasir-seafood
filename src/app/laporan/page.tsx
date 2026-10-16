@@ -1,8 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { getKasirSessionState } from '@/lib/kasir-session'
+import { getStoreDateKey } from '@/lib/time'
 import { getSession } from '@/lib/session'
 import { redirect } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import AutoRefresh from '@/components/AutoRefresh'
 import LaporanClient from './LaporanClient'
 
 export const metadata = {
@@ -31,24 +33,25 @@ export default async function LaporanPage() {
     )
   }
 
-  // Ambil status kasir hari ini
   const state = await getKasirSessionState(prisma, defaultWarung.id, session.id)
+  const isOwnerView = session.role === 'OWNER'
+  // The owner reads the whole outlet; a cashier only sees their own shift.
+  const transaksiWhere = {
+    warungId: defaultWarung.id,
+    ...(isOwnerView ? {} : { kasirId: session.id }),
+    createdAt: { gte: state.dayStart, lt: state.dayEnd },
+    status: 'SELESAI' as const,
+  }
 
-  // Ambil data laporan
   const transaksis = await prisma.transaksi.findMany({
-    where: {
-      warungId: defaultWarung.id,
-      kasirId: session.id,
-      createdAt: { gte: state.sessionStart, lte: state.sessionEnd },
-      status: 'SELESAI',
-    },
+    where: transaksiWhere,
     include: { items: true },
   })
 
   const aktivitasKasir = await prisma.activityLog.findMany({
     where: {
       warungId: defaultWarung.id,
-      userId: session.id,
+      ...(isOwnerView ? {} : { userId: session.id }),
       createdAt: { gte: state.today, lt: state.tomorrow },
       aktivitas: { in: ['LOGIN', 'BUKA_KASIR', 'TUTUP_KASIR'] },
     },
@@ -98,7 +101,7 @@ export default async function LaporanPage() {
   })
 
   const laporanData = {
-    tanggal: state.today.toISOString().split('T')[0],
+    tanggal: getStoreDateKey(),
     warung: { id: defaultWarung.id, nama: defaultWarung.nama, kode: defaultWarung.kode, alamat: null },
     rekap,
     transaksi: transaksis.map(t => ({
@@ -134,6 +137,7 @@ export default async function LaporanPage() {
 
   return (
     <div className="app-container">
+      <AutoRefresh />
       <Navbar
         session={{
           warungNama: defaultWarung.nama,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, requireRole } from '@/lib/auth'
+import { getStoreDayRange } from '@/lib/time'
 
 // GET /api/dashboard — ambil data ringkasan dashboard
 export async function GET(request: NextRequest) {
@@ -11,10 +12,7 @@ export async function GET(request: NextRequest) {
     const authError = requireRole(context, 'OWNER')
     if (authError) return authError
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
+    const { today, tomorrow } = getStoreDayRange()
 
     const transaksiHariIniWhere = {
       createdAt: { gte: today, lt: tomorrow },

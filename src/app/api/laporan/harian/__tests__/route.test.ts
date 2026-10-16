@@ -22,6 +22,7 @@ vi.mock('@/lib/auth', () => ({
 
 import { GET } from '../route'
 import { prisma } from '@/lib/prisma'
+import { getStoreDayRange } from '@/lib/time'
 
 describe('Current cashier session report', () => {
   beforeEach(() => {
@@ -39,8 +40,7 @@ describe('Current cashier session report', () => {
 
   it('includes all transactions for the day even after cashier reopens', async () => {
     const reopenedAt = new Date('2026-09-14T05:00:00.000Z')
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = getStoreDayRange().today
     vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue({
       id: 'session1',
       warungId: 'warung1',
@@ -72,8 +72,7 @@ describe('Current cashier session report', () => {
   })
 
   it('reports all transactions for the day across repeated open and close cycles', async () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = getStoreDayRange().today
     const reopenedAt = new Date('2026-09-14T11:00:00.000Z')
     const closedAt = new Date('2026-09-14T15:00:00.000Z')
     vi.mocked(prisma.kasirSesi.findFirst)
@@ -103,7 +102,7 @@ describe('Current cashier session report', () => {
 
     expect(response.status).toBe(200)
     expect(prisma.transaksi.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ createdAt: { gte: today, lte: closedAt } }),
+      where: expect.objectContaining({ createdAt: { gte: today, lt: getStoreDayRange().tomorrow } }),
     }))
   })
 

@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { getKasirSessionState } from '@/lib/kasir-session'
+import { getStoreDayRange } from '@/lib/time'
 import Navbar from '@/components/Navbar'
+import AutoRefresh from '@/components/AutoRefresh'
 import Link from 'next/link'
 import { BarChart3, UtensilsCrossed, Users, ClipboardList, ScrollText, Plus } from 'lucide-react'
 
@@ -10,10 +12,7 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/login')
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
+  const { today, tomorrow } = getStoreDayRange()
 
   const now = new Date()
   const dateStr = now.toLocaleDateString('id-ID', {
@@ -68,6 +67,7 @@ export default async function DashboardPage() {
 
     return (
       <div className="app-container">
+        <AutoRefresh />
         <Navbar session={session} activePage="dashboard" />
         <div className="content-area">
           <div style={{ marginBottom: '2rem' }}>
