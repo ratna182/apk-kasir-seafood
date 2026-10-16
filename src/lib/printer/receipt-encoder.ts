@@ -121,7 +121,8 @@ export async function encodeReceipt(
 function paymentLabel(method: string | null | undefined): string {
   if (method === 'QRIS') return 'Qris'
   if (method === 'TRANSFER') return 'Transfer'
-  return 'Cash'
+  if (method === 'CASH') return 'Cash'
+  return '-'
 }
 
 function pad2(value: number): string {

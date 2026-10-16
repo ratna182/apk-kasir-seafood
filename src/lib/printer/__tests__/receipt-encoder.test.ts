@@ -231,6 +231,22 @@ describe('encodeReceipt', () => {
     expect(qris.some((line) => line.startsWith('Bayar (Qris)'))).toBe(true)
   })
 
+  it('never guesses a payment method that is missing or unknown', async () => {
+    for (const metode of [null, undefined, 'DEBIT']) {
+      const lines = receiptLines(
+        await encodeReceipt({
+          transaction: { ...TRANSACTION, metodePembayaran: metode as never },
+          cashier: 'Kasir',
+          warungNama: null,
+          width: '80mm',
+        }),
+      )
+      expect(lines.some((line) => line.startsWith('Bayar (-)'))).toBe(true)
+      expect(lines.some((line) => line.startsWith('Bayar (Cash)'))).toBe(false)
+      expect(lines.some((line) => line.startsWith('Kembali'))).toBe(false)
+    }
+  })
+
   it('requests the logo raster for the active column count', async () => {
     await encodeReceipt({ transaction: TRANSACTION, cashier: 'Kasir', warungNama: null, width: '58mm' })
     expect(logo.load).toHaveBeenCalledWith(32)
