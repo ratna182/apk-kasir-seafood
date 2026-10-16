@@ -116,7 +116,7 @@ class UnifiedPrinter {
       const config: PrinterConfig = {
         deviceId: 'imin-built-in',
         deviceName: 'iMin D4-504 Built-in Printer',
-        width: savedConfig?.width || '58mm',
+        width: savedConfig?.width || '80mm',
         connectionType: 'imin',
       }
       savePrinterConfig(config)

@@ -43,6 +43,8 @@ public final class SppPrinter {
     private static final long ATTEMPT_TIMEOUT_MS = 4000L;
     private static final long JOB_TIMEOUT_MS = 10000L;
     private static final long SOCKET_GAP_MS = 300L;
+    private static final int WRITE_CHUNK_BYTES = 512;
+    private static final long WRITE_CHUNK_GAP_MS = 5L;
 
     private final Context context;
     private final ExecutorService jobExecutor = Executors.newSingleThreadExecutor();
@@ -297,8 +299,16 @@ public final class SppPrinter {
         OutputStream output = null;
         try {
             output = socket.getOutputStream();
-            output.write(data);
-            output.flush();
+            // A logo makes the stream several KB; the printer buffer is happier with steady chunks.
+            for (int offset = 0; offset < data.length; offset += WRITE_CHUNK_BYTES) {
+                int length = Math.min(WRITE_CHUNK_BYTES, data.length - offset);
+                output.write(data, offset, length);
+                output.flush();
+                if (offset + length < data.length) {
+                    try { Thread.sleep(WRITE_CHUNK_GAP_MS); }
+                    catch (InterruptedException error) { Thread.currentThread().interrupt(); return failure("spp-write-failed", error); }
+                }
+            }
             state.flushed = true;
             state.bytes = data.length;
             try { Thread.sleep(150L); }

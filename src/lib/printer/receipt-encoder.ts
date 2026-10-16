@@ -1,5 +1,5 @@
-import type { PrinterConfig } from './types'
 import { CHAR_WIDTHS } from './types'
+import { loadReceiptLogo } from './logo'
 import {
   initPrinter,
   feedAndCut,
@@ -33,29 +33,77 @@ export interface ReceiptTransaction {
   }>
 }
 
-function centerText(text: string, width: number): string {
-  if (text.length >= width) return text.slice(0, width)
-  const pad = Math.floor((width - text.length) / 2)
-  return ' '.repeat(pad) + text
+type Align = 'left' | 'center' | 'right'
+type Scale = 1 | 2
+
+/** Double-width text occupies two columns per character, so it only fits at half the width. */
+function fitScale(text: string, width: number, requested: Scale): Scale {
+  if (requested === 1) return 1
+  return text.length * 2 <= width ? 2 : 1
 }
 
-function rightText(text: string, width: number): string {
-  if (text.length >= width) return text.slice(0, width)
-  return ' '.repeat(width - text.length) + text
+function centerText(text: string, width: number, scale: Scale = 1): string {
+  const columns = Math.max(1, Math.floor(width / scale))
+  if (text.length >= columns) return text.slice(0, columns)
+  return ' '.repeat(Math.floor((columns - text.length) / 2)) + text
 }
 
-function encodeLine(text: string, bold: boolean = true, align: 'left' | 'center' | 'right' = 'left', fontSize: 1 | 2 = 1): Uint8Array {
-  const parts: Uint8Array[] = []
-  parts.push(setBold(bold))
-  if (align !== 'left') parts.push(setAlign(align))
-  if (fontSize > 1) parts.push(setFontSize(fontSize, fontSize))
-  parts.push(setText(text + '\n'))
-  if (fontSize > 1) parts.push(setFontSize(1, 1))
-  if (align !== 'left') parts.push(setAlign('left'))
-  return compose(...parts)
+function rightText(text: string, width: number, scale: Scale = 1): string {
+  const columns = Math.max(1, Math.floor(width / scale))
+  if (text.length >= columns) return text.slice(0, columns)
+  return ' '.repeat(columns - text.length) + text
 }
 
-export function encodeReceipt(
+function wrapText(text: string, width: number): string[] {
+  const columns = Math.max(1, width)
+  if (text.length <= columns) return [text]
+  const lines: string[] = []
+  let rest = text
+  while (rest.length > columns) {
+    lines.push(rest.slice(0, columns))
+    rest = rest.slice(columns)
+  }
+  if (rest.length > 0) lines.push(rest)
+  return lines
+}
+
+function createWriter(width: number) {
+  const emit = (
+    text: string,
+    options: { bold?: boolean; align?: Align; scale?: Scale } = {},
+  ): Uint8Array => {
+    const bold = options.bold ?? true
+    const align = options.align ?? 'left'
+    const requested = options.scale ?? 1
+    // Double width that overflows the paper drops to double height so the line stays emphatic.
+    const fontWidth = fitScale(text, width, requested)
+    const fontHeight = requested === 2 ? 2 : 1
+    const parts: Uint8Array[] = []
+    for (const chunk of wrapText(text, Math.max(1, Math.floor(width / fontWidth)))) {
+      parts.push(setBold(bold))
+      if (align !== 'left') parts.push(setAlign(align))
+      if (fontHeight > 1) parts.push(setFontSize(fontWidth, fontHeight))
+      parts.push(setText(chunk + '\n'))
+      if (fontHeight > 1) parts.push(setFontSize(1, 1))
+      if (align !== 'left') parts.push(setAlign('left'))
+    }
+    return compose(...parts)
+  }
+
+  const center = (text: string, options: { bold?: boolean; scale?: Scale } = {}): Uint8Array => {
+    const scale = fitScale(text, width, options.scale ?? 1)
+    return emit(centerText(text, width, scale), { ...options, align: 'center', scale })
+  }
+
+  const right = (text: string, options: { bold?: boolean; scale?: Scale } = {}): Uint8Array => {
+    const scale = fitScale(text, width, options.scale ?? 1)
+    return emit(rightText(text, width, scale), { ...options, align: 'right', scale })
+  }
+
+  return { emit, center, right }
+}
+
+export async function encodeReceipt(
   data: {
     transaction: ReceiptTransaction
     cashier: string
@@ -68,78 +116,85 @@ export function encodeReceipt(
     uangDiterima?: number
     kembalian?: number
   },
-): Uint8Array {
+): Promise<Uint8Array> {
   const w = CHAR_WIDTHS[data.width]
   const t = data.transaction
+  const { emit, center, right } = createWriter(w)
   const parts: Uint8Array[] = []
 
-  // Initialize printer with better compatibility settings
   parts.push(initPrinter())
-  parts.push(setCharset(0)) // USA character set
-  parts.push(setCodePage(0)) // CP437 code page
-  parts.push(setPrintDensity(7)) // Default density
+  parts.push(setCharset(0))
+  parts.push(setCodePage(0))
+  parts.push(setPrintDensity(7))
   parts.push(setLineSpacing(20))
   parts.push(setFontSize(1, 1))
 
+  const logo = await loadReceiptLogo(w)
+  if (logo) {
+    parts.push(setAlign('center'))
+    parts.push(logo)
+    parts.push(setAlign('left'))
+  }
+
   if (data.reprint) {
-    parts.push(encodeLine(centerText('*** CETAK ULANG STRUK RESMI ***', w), true, 'center', 1))
+    parts.push(center('*** CETAK ULANG STRUK RESMI ***'))
   }
 
-  parts.push(encodeLine(centerText('Seafood 08 Vian Jaya', w), true, 'center', 2))
-  if (data.warungAlamat) {
-    parts.push(encodeLine(centerText(data.warungAlamat, w), true, 'center'))
-  }
-  parts.push(encodeLine(centerText('IG : Seafood08vianjaya.id', w), true, 'center'))
-  parts.push(encodeLine(centerText('FB : Seafood08vianjaya', w), true, 'center'))
-  parts.push(encodeLine(centerText('TT : Seafood08vianjaya', w), true, 'center'))
+  parts.push(center('Seafood 08 Vian Jaya', { scale: 2 }))
+  if (data.warungAlamat) parts.push(center(data.warungAlamat))
+  parts.push(center('IG : Seafood08vianjaya.id'))
+  parts.push(center('FB : Seafood08vianjaya'))
+  parts.push(center('TT : Seafood08vianjaya'))
 
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
 
   const date = new Date(t.createdAt)
-  const dateStr = date.toLocaleDateString('sv-SE')
-  const timeStr = date.toLocaleTimeString('id-ID')
-  parts.push(encodeLine(`${dateStr}  ${timeStr}`, true, 'left'))
-  parts.push(encodeLine(`Kasir : ${data.cashier}`, true, 'right'))
+  parts.push(emit(`${date.toLocaleDateString('sv-SE')}  ${date.toLocaleTimeString('id-ID')}`))
+  parts.push(right(`Kasir : ${data.cashier}`))
 
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
 
   for (const item of t.items) {
-    const price = formatRupiah(item.subtotal).slice(-w)
-    const nameLine = padRight(item.namaMenu, Math.max(1, w - price.length)).slice(0, Math.max(1, w - price.length)) + price
-    parts.push(encodeLine(nameLine, true))
-
-    const detail = `${item.qty} X ${formatRupiah(item.hargaSatuan)}${item.diskonSatuan ? ` - diskon ${formatRupiah(item.diskonSatuan)}` : ''}`
-    parts.push(encodeLine(detail, true))
-
-    if (item.catatan) {
-      parts.push(encodeLine(item.catatan, true))
+    const price = formatRupiah(item.subtotal)
+    if (item.namaMenu.length + price.length <= w) {
+      parts.push(emit(padRight(item.namaMenu, w - price.length) + price))
+    } else {
+      parts.push(emit(item.namaMenu))
+      parts.push(right(price))
     }
+    parts.push(
+      emit(
+        `${item.qty} X ${formatRupiah(item.hargaSatuan)}${
+          item.diskonSatuan ? ` - diskon ${formatRupiah(item.diskonSatuan)}` : ''
+        }`,
+      ),
+    )
+    if (item.catatan) parts.push(emit(item.catatan))
   }
 
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
 
   const totalQty = t.items.reduce((acc, item) => acc + item.qty, 0)
-  parts.push(encodeLine(`Total QTY : ${totalQty}`, true))
-  parts.push(encodeLine(`Subtotal   ${formatRupiah(t.total)}`, true))
+  parts.push(emit(`Total QTY : ${totalQty}`))
+  parts.push(emit(`Subtotal   ${formatRupiah(t.total)}`))
 
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
 
-  parts.push(encodeLine(`Total      ${formatRupiah(t.total)}`, true, 'left', 2))
-  
+  parts.push(emit(`Total      ${formatRupiah(t.total)}`, { scale: 2 }))
+
   const isCash = t.metodePembayaran === 'CASH'
   if (isCash && data.uangDiterima !== undefined) {
-    parts.push(encodeLine(`Tunai      ${formatRupiah(data.uangDiterima)}`, true))
-    parts.push(encodeLine(`Kembali    ${formatRupiah(data.kembalian ?? 0)}`, true))
+    parts.push(emit(`Tunai      ${formatRupiah(data.uangDiterima)}`))
+    parts.push(emit(`Kembali    ${formatRupiah(data.kembalian ?? 0)}`))
   }
 
-  parts.push(encodeLine(drawLine(w), true))
+  parts.push(emit(drawLine(w)))
 
-  parts.push(encodeLine(centerText('Terimakasih', w), true, 'center'))
-  parts.push(encodeLine(centerText('Selamat Datang Kembali', w), true, 'center'))
-  parts.push(encodeLine(centerText('Kritik & Saran', w), true, 'center'))
-  parts.push(encodeLine(centerText('WA 0852-8000-4508', w), true, 'center'))
+  parts.push(center('Terimakasih'))
+  parts.push(center('Selamat Datang Kembali'))
+  parts.push(center('Kritik & Saran'))
+  parts.push(center('WA 0852-8000-4508'))
 
-  // Reset spacing before cutting so the printer does not feed a large blank margin.
   parts.push(setLineSpacing(20))
   parts.push(feedAndCut(0))
 

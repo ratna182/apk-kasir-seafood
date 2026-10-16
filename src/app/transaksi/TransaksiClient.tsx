@@ -277,7 +277,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     setPrinting(true)
     try {
       // Use ESC/POS encoder for thermal printer (both Bluetooth & iMin)
-      const encoded = encodeReceipt({
+      const encoded = await encodeReceipt({
         transaction: completedTransaksi,
         cashier: session.namaLengkap || session.username,
         username: session.username,

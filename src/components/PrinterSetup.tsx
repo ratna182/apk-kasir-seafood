@@ -15,7 +15,7 @@ interface PrinterSetupProps {
 export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSetupProps) {
   const [status, setStatus] = useState<PrinterStatus>('idle')
   const [config, setConfig] = useState<PrinterConfig | null>(null)
-  const [width, setWidth] = useState<'58mm' | '80mm'>('58mm')
+  const [width, setWidth] = useState<'58mm' | '80mm'>('80mm')
   const [error, setError] = useState('')
   const [debugInfo, setDebugInfo] = useState('')
   const [availablePrinters, setAvailablePrinters] = useState<{ bluetooth: boolean; imin: boolean }>({ bluetooth: false, imin: false })

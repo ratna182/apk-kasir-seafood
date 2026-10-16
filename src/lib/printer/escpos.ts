@@ -39,6 +39,40 @@ export function setFontSize(width: 1 | 2, height: 1 | 2 = 1): Uint8Array {
   return bytes(0x1D, 0x21, n)
 }
 
+export interface BitmapImage {
+  /** One byte per dot, 1 = black, row major. */
+  data: Uint8Array
+  widthDots: number
+  heightDots: number
+}
+
+/** GS v 0: raster bit image, the only way a web-hosted logo can reach the printer. */
+export function encodeRasterImage(image: BitmapImage): Uint8Array {
+  const bytesPerRow = Math.ceil(image.widthDots / 8)
+  const header = bytes(
+    0x1D,
+    0x76,
+    0x30,
+    0x00,
+    bytesPerRow & 0xFF,
+    (bytesPerRow >> 8) & 0xFF,
+    image.heightDots & 0xFF,
+    (image.heightDots >> 8) & 0xFF,
+  )
+  const raster = new Uint8Array(bytesPerRow * image.heightDots)
+  for (let y = 0; y < image.heightDots; y++) {
+    for (let x = 0; x < bytesPerRow * 8; x++) {
+      if (x >= image.widthDots) continue
+      if (!image.data[y * image.widthDots + x]) continue
+      raster[y * bytesPerRow + (x >> 3)] |= 0x80 >> (x & 7)
+    }
+  }
+  const result = new Uint8Array(header.length + raster.length)
+  result.set(header)
+  result.set(raster, header.length)
+  return result
+}
+
 export function setLineSpacing(spacing: number): Uint8Array {
   return bytes(0x1B, 0x33, spacing)
 }
