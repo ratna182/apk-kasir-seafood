@@ -6,13 +6,41 @@ import java.text.NumberFormat;
 import java.text.Normalizer;
 import java.util.Locale;
 
+/**
+ * Builds the ESC/POS byte stream for the SPP test receipt.
+ *
+ * <p>Pure Java on purpose: no Android imports, so it can be exercised by a plain JVM unit test.
+ */
 public final class EscPosReceiptBuilder {
+    public static final int COLUMNS_58MM = 32;
+    public static final int COLUMNS_80MM = 48;
+
     private static final byte ESC = 0x1B;
     private static final byte GS = 0x1D;
     private final int width;
 
     public EscPosReceiptBuilder(int width) {
-        this.width = width == 48 ? 48 : 32;
+        this.width = width == COLUMNS_58MM ? COLUMNS_58MM : COLUMNS_80MM;
+    }
+
+    public static EscPosReceiptBuilder forPaperWidth(String paperWidth) {
+        return new EscPosReceiptBuilder(columnsForPaperWidth(paperWidth));
+    }
+
+    public static int columnsForPaperWidth(String paperWidth) {
+        return "58mm".equalsIgnoreCase(paperWidth) ? COLUMNS_58MM : COLUMNS_80MM;
+    }
+
+    public static int paperWidthMm(String paperWidth) {
+        return "58mm".equalsIgnoreCase(paperWidth) ? 58 : 80;
+    }
+
+    public int columns() {
+        return width;
+    }
+
+    public int paperWidthMm() {
+        return width == COLUMNS_58MM ? 58 : 80;
     }
 
     public byte[] buildTestReceipt(String storeName, String dateTime, String table, String payment) {
@@ -22,32 +50,48 @@ public final class EscPosReceiptBuilder {
         command(out, ESC, 0x61, 0x01); // center
         command(out, ESC, 0x45, 0x01); // bold
         command(out, GS, 0x21, 0x11); // double width and height
-        line(out, storeName);
+        text(out, storeName, Math.max(1, width / 2));
         command(out, GS, 0x21, 0x00);
         command(out, ESC, 0x45, 0x00);
-        line(out, dateTime);
+        text(out, dateTime, width);
+        text(out, "LEBAR " + paperWidthMm() + " MM / " + width + " KOLOM", width);
         command(out, ESC, 0x61, 0x00); // left
-        line(out, repeat('-', width));
-        line(out, "Meja: " + table);
-        line(out, "Bayar: " + payment);
-        line(out, repeat('-', width));
+        text(out, ruler(), width);
+        text(out, rulerTens(), width);
+        text(out, repeat('-', width), width);
+        text(out, "Meja: " + table, width);
+        text(out, "Bayar: " + payment, width);
+        text(out, repeat('-', width), width);
         item(out, "Nasi Goreng Seafood", 1, 25000);
         item(out, "Es Teh Manis", 2, 5000);
-        line(out, repeat('-', width));
-        line(out, rightAligned("TOTAL", rupiah(35000)));
-        line(out, "");
+        text(out, repeat('-', width), width);
+        text(out, rightAligned("TOTAL", rupiah(35000)), width);
+        text(out, "", width);
         command(out, ESC, 0x61, 0x01);
         command(out, ESC, 0x45, 0x01);
-        line(out, "TES CETAK OK");
+        text(out, "TES CETAK OK", width);
         command(out, ESC, 0x45, 0x00);
         command(out, ESC, 0x61, 0x00);
         command(out, ESC, 0x64, 0x04); // feed four lines
-        try {
-            command(out, GS, 0x56, 0x42, 0x00); // cut; devices without cutters ignore it
-        } catch (RuntimeException ignored) {
-            // A cutter is optional for this SPP path.
-        }
+        command(out, GS, 0x56, 0x42, 0x00); // cut; devices without cutters ignore it
         return out.toByteArray();
+    }
+
+    /** Column ruler: the last digit of every ten-column step, so cut-off edges are obvious. */
+    public String ruler() {
+        StringBuilder result = new StringBuilder(width);
+        for (int column = 1; column <= width; column++) result.append((char) ('0' + column % 10));
+        return result.toString();
+    }
+
+    /** Tens marks placed on the ruler, every tenth column. */
+    public String rulerTens() {
+        StringBuilder result = new StringBuilder(width);
+        for (int column = 1; column <= width; column++) {
+            if (column % 10 == 0) result.append((char) ('0' + (column / 10) % 10));
+            else result.append(' ');
+        }
+        return result.toString();
     }
 
     private void item(ByteArrayOutputStream out, String name, int quantity, long price) {
@@ -60,10 +104,10 @@ public final class EscPosReceiptBuilder {
             String part = cleanName.substring(0, end);
             cleanName = cleanName.substring(end).trim();
             if (first) {
-                line(out, padRight(part, leftWidth) + " " + right);
+                text(out, padRight(part, leftWidth) + " " + right, width);
                 first = false;
             } else {
-                line(out, part);
+                text(out, part, width);
             }
         }
     }
@@ -85,6 +129,22 @@ public final class EscPosReceiptBuilder {
         StringBuilder result = new StringBuilder(Math.max(0, count));
         for (int i = 0; i < count; i++) result.append(value);
         return result.toString();
+    }
+
+    /** Writes text wrapped at {@code maxColumns}, so nothing is clipped by the paper edge. */
+    private void text(ByteArrayOutputStream out, String value, int maxColumns) {
+        int limit = Math.max(1, maxColumns);
+        String clean = ascii(value);
+        if (clean.isEmpty()) {
+            line(out, "");
+            return;
+        }
+        int start = 0;
+        while (start < clean.length()) {
+            int end = Math.min(start + limit, clean.length());
+            line(out, clean.substring(start, end));
+            start = end;
+        }
     }
 
     private void line(ByteArrayOutputStream out, String value) {
