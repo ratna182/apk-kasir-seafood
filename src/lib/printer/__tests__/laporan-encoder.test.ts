@@ -7,7 +7,7 @@ vi.mock('../logo', () => ({
   clearReceiptLogoCache: () => {},
 }))
 
-const CUT_TAIL = [0x1B, 0x33, 20, 0x1D, 0x56, 0x00]
+const CUT_TAIL = [0x1B, 0x33, 20, 0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]
 
 const DATA: LaporanData = {
   tanggal: '2026-09-16',
@@ -154,7 +154,7 @@ describe('encodeLaporan', () => {
     expect(lines.some((line) => line.includes('Rp 260.000') && line.includes('GRAND TOTAL:'))).toBe(true)
     expect(lines.some((line) => line.trimStart().startsWith('Total Qty:') && line.endsWith('4 item'))).toBe(true)
     expect(lines.some((line) => line.trimStart().startsWith('Total Transaksi:') && line.endsWith('1 transaksi'))).toBe(true)
-    expect(Array.from(output.slice(-6))).toEqual(CUT_TAIL)
+    expect(Array.from(output.slice(-10))).toEqual(CUT_TAIL)
   })
 
   it('shows Buka and Tutup Kasir times on the right side', async () => {

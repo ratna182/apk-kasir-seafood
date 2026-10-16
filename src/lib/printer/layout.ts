@@ -1,12 +1,10 @@
 import {
   compose,
-  setAlign,
   setBold,
   setFontSize,
   setText,
 } from './escpos'
 
-export type Align = 'left' | 'center' | 'right'
 export type Scale = 1 | 2
 
 /**
@@ -46,7 +44,6 @@ export function wrapText(text: string, width: number): string[] {
 
 export interface LineOptions {
   bold?: boolean
-  align?: Align
   /** 2 asks for double width; it degrades to double height when the line would overflow. */
   scale?: Scale
 }
@@ -54,22 +51,22 @@ export interface LineOptions {
 /**
  * Builds receipt lines that respect the paper width: wrap instead of clip, and centre against the
  * real footprint of a scaled line.
+ *
+ * Alignment is done with padding only. Sending ESC a as well would centre the already padded line
+ * a second time and push it to the right of the paper.
  */
 export function createWriter(width: number) {
   const emit = (text: string, options: LineOptions = {}): Uint8Array => {
     const bold = options.bold ?? true
-    const align = options.align ?? 'left'
     const requested = options.scale ?? 1
     const fontWidth = fitScale(text, width, requested)
     const fontHeight = requested === 2 ? 2 : 1
     const parts: Uint8Array[] = []
     for (const chunk of wrapText(text, Math.max(1, Math.floor(width / fontWidth)))) {
       parts.push(setBold(bold))
-      if (align !== 'left') parts.push(setAlign(align))
       if (fontHeight > 1) parts.push(setFontSize(fontWidth, fontHeight))
       parts.push(setText(chunk + '\n'))
       if (fontHeight > 1) parts.push(setFontSize(1, 1))
-      if (align !== 'left') parts.push(setAlign('left'))
     }
     return compose(...parts)
   }
@@ -80,7 +77,7 @@ export function createWriter(width: number) {
     const columns = Math.max(1, Math.floor(width / fitScale(text, width, requested)))
     return compose(...wrapText(text, columns).map((chunk) => {
       const scale = fitScale(chunk, width, requested)
-      return emit(centerText(chunk, width, scale), { ...options, align: 'center', scale })
+      return emit(centerText(chunk, width, scale), { ...options, scale })
     }))
   }
 
@@ -89,7 +86,7 @@ export function createWriter(width: number) {
     const columns = Math.max(1, Math.floor(width / fitScale(text, width, requested)))
     return compose(...wrapText(text, columns).map((chunk) => {
       const scale = fitScale(chunk, width, requested)
-      return emit(rightText(chunk, width, scale), { ...options, align: 'right', scale })
+      return emit(rightText(chunk, width, scale), { ...options, scale })
     }))
   }
 

@@ -1,8 +1,8 @@
 import { encodeRasterImage, type BitmapImage } from './escpos'
 
 const LOGO_URL = '/logo-struk.webp'
-const MAX_WIDTH_DOTS = 240
-const MAX_HEIGHT_DOTS = 160
+const MAX_WIDTH_DOTS = 128
+const MAX_HEIGHT_DOTS = 128
 const INK_THRESHOLD = 160
 const LOAD_TIMEOUT_MS = 3000
 

@@ -8,7 +8,7 @@ vi.mock('../logo', () => ({
   clearReceiptLogoCache: () => {},
 }))
 
-const CUT_TAIL = [0x1B, 0x33, 20, 0x1D, 0x56, 0x00]
+const CUT_TAIL = [0x1B, 0x33, 20, 0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]
 
 const TRANSACTION = {
   id: 'tx-1',
@@ -71,7 +71,7 @@ describe('encodeReceipt', () => {
       width: '80mm',
     })
 
-    expect(Array.from(output.slice(-6))).toEqual(CUT_TAIL)
+    expect(Array.from(output.slice(-10))).toEqual(CUT_TAIL)
   })
 
   it('starts with init, keeps item lines within paper width, and emits ASCII text', async () => {
@@ -85,7 +85,7 @@ describe('encodeReceipt', () => {
       width: '58mm',
     })
     expect(Array.from(output.slice(0, 2))).toEqual([0x1B, 0x40])
-    expect(Array.from(output.slice(-6))).toEqual(CUT_TAIL)
+    expect(Array.from(output.slice(-10))).toEqual(CUT_TAIL)
     expect(new TextDecoder().decode(output)).not.toContain('\u2728')
     expect(widestLine(output)).toBeLessThanOrEqual(32)
   })
@@ -201,10 +201,41 @@ describe('encodeReceipt', () => {
     expect(lines.some((line) => line.startsWith('Total ') && line.endsWith('Rp 35.000'))).toBe(true)
     expect(lines.some((line) => line.startsWith('Bayar (Transfer)') && line.endsWith('Rp 35.000'))).toBe(true)
     expect(lines.filter((line) => line.trim() === 'Terima Kasih')).toHaveLength(1)
-    expect(lines.some((line) => line.trim() === 'Kritik dan Saran WA')).toBe(true)
-    expect(lines.some((line) => line.trim() === '0852-8000-4502')).toBe(true)
+    expect(lines.some((line) => line.trim() === 'Selamat Datang Kembali')).toBe(true)
+    expect(lines.some((line) => line.trim() === 'Kritik dan Saran WA: 0852-8000-4508')).toBe(true)
     expect(lines.some((line) => line.includes('Kritik & Saran'))).toBe(false)
   })
+
+  it('feeds the paper before cutting so the footer cannot stay behind the cutter', async () => {
+    const output = await encodeReceipt({ transaction: TRANSACTION, cashier: 'Kasir', warungNama: null, width: '80mm' })
+    const feedBeforeCut = Array.from(output.slice(-7))
+
+    expect(feedBeforeCut.slice(0, 4)).toEqual([0x0A, 0x0A, 0x0A, 0x0A])
+    expect(feedBeforeCut.slice(4)).toEqual([0x1D, 0x56, 0x00])
+  })
+
+  it('never asks the printer to align text, only the logo raster', async () => {
+    const withLogo = await encodeReceipt({
+      transaction: TRANSACTION,
+      cashier: 'Kasir',
+      warungNama: 'Warung',
+      width: '80mm',
+    })
+    logo.load.mockResolvedValue(encodeRasterImage({ data: new Uint8Array(8), widthDots: 8, heightDots: 1 }))
+    const withRaster = await encodeReceipt({ transaction: TRANSACTION, cashier: 'Kasir', warungNama: null, width: '80mm' })
+
+    // ESC a would centre an already padded line a second time and push it right of the paper.
+    expect(countAlignCommands(withLogo)).toBe(0)
+    expect(countAlignCommands(withRaster)).toBe(2)
+  })
+
+  function countAlignCommands(stream: Uint8Array): number {
+    let count = 0
+    for (let index = 0; index < stream.length - 1; index++) {
+      if (stream[index] === 0x1b && stream[index + 1] === 0x61) count++
+    }
+    return count
+  }
 
   it('labels the payment method per channel and adds the change line for cash', async () => {
     const lines = receiptLines(
@@ -262,7 +293,7 @@ describe('encodeReceipt', () => {
 
     expect(rasterAt).toBeGreaterThan(-1)
     expect(headerAt).toBeGreaterThan(rasterAt)
-    expect(Array.from(output.slice(-6))).toEqual(CUT_TAIL)
+    expect(Array.from(output.slice(-10))).toEqual(CUT_TAIL)
     expect(widestLine(output)).toBeLessThanOrEqual(48)
   })
 
@@ -270,7 +301,7 @@ describe('encodeReceipt', () => {
     logo.load.mockResolvedValue(null)
     const output = await encodeReceipt({ transaction: TRANSACTION, cashier: 'Kasir', warungNama: null, width: '80mm' })
     expect(output.length).toBeGreaterThan(100)
-    expect(Array.from(output.slice(-6))).toEqual(CUT_TAIL)
+    expect(Array.from(output.slice(-10))).toEqual(CUT_TAIL)
   })
 })
 

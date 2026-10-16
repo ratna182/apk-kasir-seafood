@@ -10,6 +10,7 @@ import {
   compose,
   padRight,
   drawLine,
+  CUT_FEED_LINES,
 } from './escpos'
 
 export interface LaporanRekapItem {
@@ -216,7 +217,7 @@ export async function encodeLaporan(
   parts.push(center(cashierName || 'Kasir Vian Jaya 08'))
 
   parts.push(setLineSpacing(20))
-  parts.push(feedAndCut(0))
+  parts.push(feedAndCut(CUT_FEED_LINES))
 
   return compose(...parts)
 }

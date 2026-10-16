@@ -13,6 +13,7 @@ import {
   setCodePage,
   setPrintDensity,
   setFontSize,
+  CUT_FEED_LINES,
 } from './escpos'
 
 export interface ReceiptTransaction {
@@ -109,11 +110,10 @@ export async function encodeReceipt(
 
   parts.push(center('Terima Kasih'))
   parts.push(center('Selamat Datang Kembali'))
-  parts.push(center('Kritik dan Saran WA'))
-  parts.push(center('0852-8000-4502'))
+  parts.push(center('Kritik dan Saran WA: 0852-8000-4508'))
 
   parts.push(setLineSpacing(20))
-  parts.push(feedAndCut(0))
+  parts.push(feedAndCut(CUT_FEED_LINES))
 
   return compose(...parts)
 }

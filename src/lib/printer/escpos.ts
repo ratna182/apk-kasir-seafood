@@ -21,6 +21,12 @@ export function feedAndCut(lines: number = 3): Uint8Array {
   return result
 }
 
+/**
+ * Feeds before the cut. Without it the last lines of a receipt stay behind the cutter and are lost,
+ * which is how the footer disappeared on the device.
+ */
+export const CUT_FEED_LINES = 4
+
 export function setText(text: string): Uint8Array {
   return textEncoder(text.normalize('NFKD').replace(/[^\x20-\x7E\n\r]/g, '?'))
 }

@@ -845,8 +845,8 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       {/* MODAL STRUK */}
       {showReceiptModal && completedTransaksi && (
         <div className="modal-overlay no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 1000, animation: 'fadeIn 0.2s ease-out' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '1.5rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', animation: 'scaleIn 0.2s ease-out' }}>
-            <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '420px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', padding: '1.5rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', animation: 'scaleIn 0.2s ease-out' }}>
+            <div style={{ textAlign: 'center', marginBottom: '1.25rem', flexShrink: 0 }}>
               <CheckCircle size={40} style={{ color: 'var(--color-success)', marginBottom: '0.5rem' }} />
               <h3 style={{ fontSize: '1.25rem', margin: 0 }}>Transaksi Berhasil!</h3>
               <p className="text-secondary text-xs">
@@ -854,28 +854,31 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
               </p>
             </div>
 
-            <Receipt transaction={completedTransaksi} cashier={session.namaLengkap || session.username} username={session.username} warungKode={session.warungKode} warungNama={session.warungNama} warungAlamat={session.warungAlamat} width={printerWidth} preview uangDiterima={typeof uangDiterima === 'number' ? uangDiterima : undefined} kembalian={kembalianResult?.kembalian} />
-            <div className="receipt-width-picker">
-              <span>Ukuran printer</span>
-              {(['58mm', '80mm'] as const).map((width) => <button key={width} type="button" onClick={() => setPrinterWidth(width)} className={`btn btn-sm ${printerWidth === width ? 'btn-primary' : 'btn-ghost'}`}>{width}</button>)}
-              <PrinterStatusBadge onSetupClick={() => setShowPrinterSetup(true)} />
+            {/* The D4-504 screen is short, so the preview scrolls and the buttons stay pinned. */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <Receipt transaction={completedTransaksi} cashier={session.namaLengkap || session.username} username={session.username} warungKode={session.warungKode} warungNama={session.warungNama} warungAlamat={session.warungAlamat} width={printerWidth} preview uangDiterima={typeof uangDiterima === 'number' ? uangDiterima : undefined} kembalian={kembalianResult?.kembalian} />
+              <div className="receipt-width-picker">
+                <span>Ukuran printer</span>
+                {(['58mm', '80mm'] as const).map((width) => <button key={width} type="button" onClick={() => setPrinterWidth(width)} className={`btn btn-sm ${printerWidth === width ? 'btn-primary' : 'btn-ghost'}`}>{width}</button>)}
+                <PrinterStatusBadge onSetupClick={() => setShowPrinterSetup(true)} />
+              </div>
+
+              {/* Instruksi cetak untuk Android */}
+              <div style={{ background: 'var(--color-accent-soft)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-md)', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
+                <strong style={{ color: 'var(--color-text-primary)' }}>Cara cetak dari Android:</strong>
+                <ol style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, lineHeight: 1.6 }}>
+                  <li>Klik <strong>Cetak Struk</strong></li>
+                  <li>Pilih printer <strong>Blueprint</strong></li>
+                  <li>Tap <strong>&quot;Kertas&quot;</strong> → pilih <strong>&quot;Rol 58mm&quot;</strong> atau <strong>&quot;Rol 80mm&quot;</strong> jika ada</li>
+                  <li>Jika tidak ada, pilih <strong>&quot;Lainnya&quot;</strong> → cari ukuran <strong>72mm</strong></li>
+                  <li>Jika tidak bisa pilih, langsung klik <strong>Print</strong> saja</li>
+                </ol>
+              </div>
+
+              {error && <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>{error}</div>}
             </div>
 
-            {/* Instruksi cetak untuk Android */}
-            <div style={{ background: 'var(--color-accent-soft)', border: '1px solid var(--color-accent)', borderRadius: 'var(--radius-md)', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-              <strong style={{ color: 'var(--color-text-primary)' }}>Cara cetak dari Android:</strong>
-              <ol style={{ margin: '0.5rem 0 0 1.25rem', padding: 0, lineHeight: 1.6 }}>
-                <li>Klik <strong>Cetak Struk</strong></li>
-                <li>Pilih printer <strong>Blueprint</strong></li>
-                <li>Tap <strong>&quot;Kertas&quot;</strong> → pilih <strong>&quot;Rol 58mm&quot;</strong> atau <strong>&quot;Rol 80mm&quot;</strong> jika ada</li>
-                <li>Jika tidak ada, pilih <strong>&quot;Lainnya&quot;</strong> → cari ukuran <strong>72mm</strong></li>
-                <li>Jika tidak bisa pilih, langsung klik <strong>Print</strong> saja</li>
-              </ol>
-            </div>
-
-            {error && <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>{error}</div>}
-
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', flexShrink: 0, paddingTop: '0.5rem' }}>
               <button type="button" onClick={handleNewOrder} className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>
                 Pesanan Baru
               </button>
