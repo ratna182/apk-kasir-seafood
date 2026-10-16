@@ -38,6 +38,7 @@ declare global {
       getStatus: () => Promise<string>
       getDiagnostics?: () => Promise<string> | string
       getAppVersion?: () => Promise<string> | string
+      tesCetakSpp?: (paperWidth?: string) => Promise<string> | string
       isSupported: () => boolean
     }
   }
@@ -232,6 +233,16 @@ class IMinPrinter implements IMinPrinterSDK {
       return raw || null
     } catch (error) {
       this.logError('App version failed', error)
+      return null
+    }
+  }
+
+  async testSpp(paperWidth: '58mm' | '80mm' = '58mm'): Promise<Record<string, unknown> | null> {
+    try {
+      const raw = await window.IMinPrinter?.tesCetakSpp?.(paperWidth)
+      return raw ? JSON.parse(raw) as Record<string, unknown> : null
+    } catch (error) {
+      this.logError('SPP test failed', error)
       return null
     }
   }

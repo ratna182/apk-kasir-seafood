@@ -81,7 +81,7 @@ class UnifiedPrinter {
     // If we have a saved config, use that connection type
     if (config) {
       if (config.connectionType === 'imin') {
-        return this.connectImin()
+        return this.connectImin(config)
       }
       return this.connectBluetooth(savedConfig)
     }
@@ -107,7 +107,7 @@ class UnifiedPrinter {
   /**
    * Connect to iMin built-in printer
    */
-  async connectImin(): Promise<boolean> {
+  async connectImin(savedConfig?: PrinterConfig): Promise<boolean> {
     this.log('Connecting to iMin built-in printer...')
     this.activePrinter = 'imin'
     
@@ -116,7 +116,7 @@ class UnifiedPrinter {
       const config: PrinterConfig = {
         deviceId: 'imin-built-in',
         deviceName: 'iMin D4-504 Built-in Printer',
-        width: '80mm',
+        width: savedConfig?.width || '58mm',
         connectionType: 'imin',
       }
       savePrinterConfig(config)

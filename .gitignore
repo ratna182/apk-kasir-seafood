@@ -40,5 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Android release signing secrets
+/android/keystore.properties
+/android/*.jks
+/android/*.keystore
+
 .vercel
 .env*

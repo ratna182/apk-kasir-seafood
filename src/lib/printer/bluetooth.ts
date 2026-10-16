@@ -240,7 +240,7 @@ class BluetoothPrinter {
       const config: PrinterConfig = {
         deviceId: device.id,
         deviceName: device.name || 'Printer Bluetooth',
-        width: savedConfig?.width || '80mm',
+        width: savedConfig?.width || '58mm',
         connectionType: 'bluetooth',
       }
       savePrinterConfig(config)

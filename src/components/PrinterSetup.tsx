@@ -15,7 +15,7 @@ interface PrinterSetupProps {
 export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSetupProps) {
   const [status, setStatus] = useState<PrinterStatus>('idle')
   const [config, setConfig] = useState<PrinterConfig | null>(null)
-  const [width, setWidth] = useState<'58mm' | '80mm'>('80mm')
+  const [width, setWidth] = useState<'58mm' | '80mm'>('58mm')
   const [error, setError] = useState('')
   const [debugInfo, setDebugInfo] = useState('')
   const [availablePrinters, setAvailablePrinters] = useState<{ bluetooth: boolean; imin: boolean }>({ bluetooth: false, imin: false })
@@ -43,10 +43,10 @@ export default function PrinterSetup({ open, onClose, onConfigured }: PrinterSet
     try {
       let ok: boolean
       if (type === 'imin') {
-        ok = await printer.connectImin()
+        ok = await printer.connectImin({ deviceId: 'imin-built-in', deviceName: 'iMin D4-504 Built-in Printer', width, connectionType: 'imin' })
       } else {
         const cfg = loadPrinterConfig()
-        ok = await printer.connectBluetooth(cfg || undefined)
+        ok = await printer.connectBluetooth(cfg ? { ...cfg, width } : { deviceId: '', deviceName: '', width, connectionType: 'bluetooth' })
       }
       
       if (ok) {
