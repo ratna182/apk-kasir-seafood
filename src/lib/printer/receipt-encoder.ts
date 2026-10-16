@@ -1,13 +1,12 @@
 import { CHAR_WIDTHS } from './types'
 import { loadReceiptLogo } from './logo'
-import { createWriter } from './layout'
+import { createWriter, rightText } from './layout'
 import {
   initPrinter,
   feedAndCut,
   setAlign,
   setLineSpacing,
   compose,
-  padRight,
   drawLine,
   formatRupiah,
   setCharset,
@@ -49,7 +48,7 @@ export async function encodeReceipt(
 ): Promise<Uint8Array> {
   const w = CHAR_WIDTHS[data.width]
   const t = data.transaction
-  const { emit, center, right } = createWriter(w)
+  const { emit, center } = createWriter(w)
   const parts: Uint8Array[] = []
 
   parts.push(initPrinter())
@@ -70,7 +69,7 @@ export async function encodeReceipt(
     parts.push(center('*** CETAK ULANG STRUK RESMI ***'))
   }
 
-  parts.push(center('Seafood 08 Vian Jaya', { scale: 2 }))
+  parts.push(center('Seafood Vian Jaya 08', { scale: 2 }))
   if (data.warungAlamat) parts.push(center(data.warungAlamat))
   parts.push(center('IG : Seafood08vianjaya.id'))
   parts.push(center('FB : Seafood08vianjaya'))
@@ -78,27 +77,20 @@ export async function encodeReceipt(
 
   parts.push(emit(drawLine(w)))
 
-  const date = new Date(t.createdAt)
-  parts.push(emit(`${date.toLocaleDateString('sv-SE')}  ${date.toLocaleTimeString('id-ID')}`))
-  parts.push(right(`Kasir : ${data.cashier}`))
+  const createdAt = new Date(t.createdAt)
+  const dateText = createdAt.toLocaleDateString('sv-SE')
+  const timeText = `${pad2(createdAt.getHours())}:${pad2(createdAt.getMinutes())}:${pad2(createdAt.getSeconds())}`
+  parts.push(emit(dateText + `Kasir : ${data.cashier}`.padStart(Math.max(1, w - dateText.length))))
+  parts.push(emit(timeText))
 
   parts.push(emit(drawLine(w)))
 
   for (const item of t.items) {
-    const price = formatRupiah(item.subtotal)
-    if (item.namaMenu.length + price.length <= w) {
-      parts.push(emit(padRight(item.namaMenu, w - price.length) + price))
-    } else {
-      parts.push(emit(item.namaMenu))
-      parts.push(right(price))
-    }
-    parts.push(
-      emit(
-        `${item.qty} X ${formatRupiah(item.hargaSatuan)}${
-          item.diskonSatuan ? ` - diskon ${formatRupiah(item.diskonSatuan)}` : ''
-        }`,
-      ),
-    )
+    parts.push(emit(item.namaMenu))
+    const detail = `${item.qty} X ${formatRupiah(item.hargaSatuan)}${
+      item.diskonSatuan ? ` - diskon ${formatRupiah(item.diskonSatuan)}` : ''
+    }`
+    parts.push(emit(detail + rightText(formatRupiah(item.subtotal), Math.max(1, w - detail.length))))
     if (item.catatan) parts.push(emit(item.catatan))
   }
 
@@ -106,27 +98,38 @@ export async function encodeReceipt(
 
   const totalQty = t.items.reduce((acc, item) => acc + item.qty, 0)
   parts.push(emit(`Total QTY : ${totalQty}`))
-  parts.push(emit(`Subtotal   ${formatRupiah(t.total)}`))
-
-  parts.push(emit(drawLine(w)))
-
-  parts.push(emit(`Total      ${formatRupiah(t.total)}`, { scale: 2 }))
-
-  const isCash = t.metodePembayaran === 'CASH'
-  if (isCash && data.uangDiterima !== undefined) {
-    parts.push(emit(`Tunai      ${formatRupiah(data.uangDiterima)}`))
-    parts.push(emit(`Kembali    ${formatRupiah(data.kembalian ?? 0)}`))
+  parts.push(emit(labeledAmount('Sub Total', t.total, w)))
+  parts.push(emit(labeledAmount('Total', t.total, w)))
+  parts.push(emit(labeledAmount(`Bayar (${paymentLabel(t.metodePembayaran)})`, t.total, w)))
+  if (t.metodePembayaran === 'CASH' && data.kembalian !== undefined) {
+    parts.push(emit(labeledAmount('Kembali', data.kembalian, w)))
   }
 
   parts.push(emit(drawLine(w)))
 
-  parts.push(center('Terimakasih'))
+  parts.push(center('Terima Kasih'))
   parts.push(center('Selamat Datang Kembali'))
-  parts.push(center('Kritik & Saran'))
-  parts.push(center('WA 0852-8000-4508'))
+  parts.push(center('Kritik dan Saran WA'))
+  parts.push(center('0852-8000-4502'))
 
   parts.push(setLineSpacing(20))
   parts.push(feedAndCut(0))
 
   return compose(...parts)
+}
+
+function paymentLabel(method: string | null | undefined): string {
+  if (method === 'QRIS') return 'Qris'
+  if (method === 'TRANSFER') return 'Transfer'
+  return 'Cash'
+}
+
+function pad2(value: number): string {
+  return value.toString().padStart(2, '0')
+}
+
+function labeledAmount(label: string, amount: number, width: number): string {
+  const value = formatRupiah(amount)
+  if (label.length + value.length > width) return label + '\n' + rightText(value, width)
+  return label + value.padStart(width - label.length)
 }

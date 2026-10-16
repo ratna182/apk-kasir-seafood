@@ -129,7 +129,7 @@ describe('encodeReceipt', () => {
       warungNama: null,
       width: '80mm',
     })
-    const header = receiptLines(output).find((line) => line.includes('Seafood 08 Vian Jaya'))
+    const header = receiptLines(output).find((line) => line.includes('Seafood Vian Jaya 08'))
     expect(header).toBeDefined()
     const pad = header?.match(/^ */)?.[0].length ?? 0
     // 20 characters at double width occupy 40 of 48 columns, so the pad is (24 - 20) / 2.
@@ -138,19 +138,97 @@ describe('encodeReceipt', () => {
     expect(pad * 2 + 20 * 2).toBeLessThanOrEqual(48)
   })
 
-  it('keeps the item price on the name line when both fit', async () => {
-    const output = await encodeReceipt({
-      transaction: {
-        ...TRANSACTION,
-        items: [{ namaMenu: 'Es Teh', hargaSatuan: 5000, qty: 2, subtotal: 10000 }],
-      },
-      cashier: 'Kasir',
-      warungNama: null,
-      width: '80mm',
-    })
-    const line = receiptLines(output).find((text) => text.includes('Es Teh') && text.includes('Rp 10.000'))
-    expect(line).toBeDefined()
-    expect(line?.length).toBe(48)
+  it('follows the reference block order: logo, name, address, socials, date with cashier', async () => {
+    const lines = receiptLines(
+      await encodeReceipt({
+        transaction: TRANSACTION,
+        cashier: 'Murtoni',
+        warungNama: null,
+        warungAlamat: 'Jl. Raya Kranggan no.18',
+        width: '80mm',
+      }),
+    )
+    const order = [
+      'Seafood Vian Jaya 08',
+      'Jl. Raya Kranggan no.18',
+      'IG : Seafood08vianjaya.id',
+      'FB : Seafood08vianjaya',
+      'TT : Seafood08vianjaya',
+    ]
+    let cursor = -1
+    for (const marker of order) {
+      const at = lines.findIndex((line, index) => index > cursor && line.includes(marker))
+      expect(at, `bagian "${marker}" tidak ditemukan`).toBeGreaterThan(-1)
+      cursor = at
+    }
+
+    const dateLine = lines.find((line) => line.includes('Kasir : Murtoni'))
+    expect(dateLine).toBeDefined()
+    expect(dateLine?.trimStart().startsWith('2026-01-01')).toBe(true)
+    expect(dateLine?.endsWith('Kasir : Murtoni')).toBe(true)
+    expect(lines[lines.indexOf(dateLine!) + 1]).toMatch(/^\d{2}:\d{2}:\d{2}$/)
+  })
+
+  it('prints the menu name on its own line with qty, unit price and subtotal right aligned', async () => {
+    const lines = receiptLines(
+      await encodeReceipt({
+        transaction: TRANSACTION,
+        cashier: 'Kasir',
+        warungNama: null,
+        width: '80mm',
+      }),
+    )
+    const nameIndex = lines.findIndex((line) => line.trim() === 'Es Teh Manis')
+    expect(nameIndex).toBeGreaterThan(-1)
+    const detail = lines[nameIndex + 1]
+    expect(detail.startsWith('2 X Rp 5.000')).toBe(true)
+    expect(detail.endsWith('Rp 10.000')).toBe(true)
+    expect(detail.length).toBe(48)
+  })
+
+  it('ends with Sub Total, Total, Bayar and the reference footer', async () => {
+    const lines = receiptLines(
+      await encodeReceipt({
+        transaction: { ...TRANSACTION, metodePembayaran: 'TRANSFER' },
+        cashier: 'Kasir',
+        warungNama: null,
+        width: '80mm',
+      }),
+    )
+
+    expect(lines.some((line) => line === 'Total QTY : 3')).toBe(true)
+    expect(lines.some((line) => line.startsWith('Sub Total') && line.endsWith('Rp 35.000'))).toBe(true)
+    expect(lines.some((line) => line.startsWith('Total ') && line.endsWith('Rp 35.000'))).toBe(true)
+    expect(lines.some((line) => line.startsWith('Bayar (Transfer)') && line.endsWith('Rp 35.000'))).toBe(true)
+    expect(lines.filter((line) => line.trim() === 'Terima Kasih')).toHaveLength(1)
+    expect(lines.some((line) => line.trim() === 'Kritik dan Saran WA')).toBe(true)
+    expect(lines.some((line) => line.trim() === '0852-8000-4502')).toBe(true)
+    expect(lines.some((line) => line.includes('Kritik & Saran'))).toBe(false)
+  })
+
+  it('labels the payment method per channel and adds the change line for cash', async () => {
+    const lines = receiptLines(
+      await encodeReceipt({
+        transaction: { ...TRANSACTION, metodePembayaran: 'CASH' },
+        cashier: 'Kasir',
+        warungNama: null,
+        width: '80mm',
+        uangDiterima: 50000,
+        kembalian: 15000,
+      }),
+    )
+
+    expect(lines.some((line) => line.startsWith('Bayar (Cash)'))).toBe(true)
+    expect(lines.some((line) => line.startsWith('Kembali') && line.endsWith('Rp 15.000'))).toBe(true)
+    const qris = receiptLines(
+      await encodeReceipt({
+        transaction: { ...TRANSACTION, metodePembayaran: 'QRIS' },
+        cashier: 'Kasir',
+        warungNama: null,
+        width: '80mm',
+      }),
+    )
+    expect(qris.some((line) => line.startsWith('Bayar (Qris)'))).toBe(true)
   })
 
   it('requests the logo raster for the active column count', async () => {
@@ -164,7 +242,7 @@ describe('encodeReceipt', () => {
 
     const output = await encodeReceipt({ transaction: TRANSACTION, cashier: 'Kasir', warungNama: null, width: '80mm' })
     const rasterAt = indexOfBytes(output, raster)
-    const headerAt = indexOfText(output, 'Seafood 08 Vian Jaya')
+    const headerAt = indexOfText(output, 'Seafood Vian Jaya 08')
 
     expect(rasterAt).toBeGreaterThan(-1)
     expect(headerAt).toBeGreaterThan(rasterAt)
