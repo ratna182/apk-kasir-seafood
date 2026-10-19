@@ -44,11 +44,10 @@ async function main() {
     data: [
       { warungId: warung1.id, username: 'kasir1', passwordHash: kasirPasswordHash, namaLengkap: 'Kasir Cabang 1', role: 'KASIR' },
       { warungId: warung2.id, username: 'kasir2', passwordHash: kasirPasswordHash, namaLengkap: 'Kasir Cabang 2', role: 'KASIR' },
-      { warungId: warung3.id, username: 'kasir3', passwordHash: kasirPasswordHash, namaLengkap: 'Kasir Cabang 3', role: 'KASIR' },
     ],
   })
 
-  console.log('✅ 3 akun kasir dibuat (password: kasir123)')
+  console.log('✅ 2 akun kasir dibuat (password: kasir123)')
 
   const categories = ['Lainnya', 'Nasi', 'Udang', 'Kerang', 'Kepiting', 'Cumi', 'Ikan Bakar', 'Sayur', 'Ayam/Bebek/Lauk', 'Minuman']
 
@@ -81,7 +80,6 @@ async function main() {
   console.log('  Owner:    username=owner    password=owner123')
   console.log('  Warung 1: username=kasir1   password=kasir123')
   console.log('  Warung 2: username=kasir2   password=kasir123')
-  console.log('  Warung 3: username=kasir3   password=kasir123')
   console.log('')
   console.log('🎉 Seeding selesai!')
 }

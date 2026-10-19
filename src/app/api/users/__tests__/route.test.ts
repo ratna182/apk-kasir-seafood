@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
       findFirst: vi.fn(),
       findUnique: vi.fn(),
+      count: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     },
@@ -80,6 +81,7 @@ describe('Users API', () => {
     it('should create user with valid data', async () => {
       vi.mocked(getAuthContext).mockReturnValue({ user: { id: '1', role: 'OWNER' } } as any)
       vi.mocked(requireRole).mockReturnValue(null)
+      vi.mocked(prisma.user.count).mockResolvedValue(0)
       vi.mocked(prisma.user.findUnique).mockResolvedValue(null)
       vi.mocked(prisma.user.create).mockResolvedValue({
         id: '2', username: 'kasir1', namaLengkap: 'Kasir Satu', isActive: true,
@@ -123,6 +125,7 @@ describe('Users API', () => {
     it('should return 422 with short password', async () => {
       vi.mocked(getAuthContext).mockReturnValue({ user: { id: '1', role: 'OWNER' } } as any)
       vi.mocked(requireRole).mockReturnValue(null)
+      vi.mocked(prisma.user.count).mockResolvedValue(0)
 
       const request = new NextRequest('http://localhost/api/users', {
         method: 'POST',
@@ -134,6 +137,24 @@ describe('Users API', () => {
 
       expect(response.status).toBe(422)
       expect(data.success).toBe(false)
+    })
+
+    it('should return 409 when two cashiers already exist', async () => {
+      vi.mocked(getAuthContext).mockReturnValue({ user: { id: '1', role: 'OWNER' } } as any)
+      vi.mocked(requireRole).mockReturnValue(null)
+      vi.mocked(prisma.user.count).mockResolvedValue(2)
+
+      const request = new NextRequest('http://localhost/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ warungId: 'warung1', username: 'kasir3', password: 'password123' }),
+      })
+
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(409)
+      expect(data.message).toContain('Maksimal 2 akun kasir')
+      expect(prisma.user.create).not.toHaveBeenCalled()
     })
   })
 })
