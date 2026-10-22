@@ -11,6 +11,7 @@ import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeReceipt } from '@/lib/printer/receipt-encoder'
 import { hitungKembalian, generateQuickAmounts } from '@/lib/payment/cash'
 import { QUICK_TABLES, LESEHAN } from '@/lib/table-layout'
+import { sortByName } from '@/lib/menu-sort'
 
 interface Menu {
   id: string
@@ -133,7 +134,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       if (existing) existing.count++
       else seen.set(menu.categoryId, { id: menu.categoryId, nama: menu.category.nama, count: 1 })
     }
-    return Array.from(seen.values())
+    return sortByName(Array.from(seen.values()))
   }, [menus])
 
   const menusByCategory = useMemo(() => {
@@ -143,6 +144,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       list.push(menu)
       grouped.set(menu.categoryId, list)
     }
+    for (const [categoryId, items] of grouped) grouped.set(categoryId, sortByName(items))
     return grouped
   }, [filteredMenus])
 

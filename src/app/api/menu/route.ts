@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
         category: { select: { id: true, nama: true } },
         warungMenus: { select: { harga: true, warungId: true } },
       },
-      orderBy: [{ sortOrder: 'asc' }, { nama: 'asc' }],
+      orderBy: [{ category: { nama: 'asc' } }, { nama: 'asc' }],
     })
 
     const menusWithHarga = menus.map((menu) => {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
+import { sortByName } from '@/lib/menu-sort'
 
 interface Category {
   id: string
@@ -49,11 +50,11 @@ export default function MenuManager() {
       const catData = await catRes.json()
       const menuData = await menuRes.json()
       if (catData.success) {
-        setCategories(catData.data)
+        setCategories(sortByName(catData.data))
         const grouped: Record<string, MenuItem[]> = {}
         for (const cat of catData.data) grouped[cat.id] = []
         if (menuData.success) {
-          for (const m of menuData.data) {
+          for (const m of sortByName<MenuItem>(menuData.data)) {
             if (grouped[m.categoryId]) grouped[m.categoryId].push(m)
           }
         }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, requireRole } from '@/lib/auth'
+import { compareIndonesian } from '@/lib/menu-sort'
 
 export async function GET(request: NextRequest) {
   try {
@@ -107,8 +108,8 @@ export async function GET(request: NextRequest) {
       }
 
       const rekap = Array.from(rekapMap.values()).sort((a, b) => {
-        if (a.kategori !== b.kategori) return a.kategori === 'MAKANAN' ? -1 : 1
-        return a.namaMenu.localeCompare(b.namaMenu)
+        const categoryOrder = compareIndonesian(a.kategori, b.kategori)
+        return categoryOrder || compareIndonesian(a.namaMenu, b.namaMenu)
       })
 
       return {

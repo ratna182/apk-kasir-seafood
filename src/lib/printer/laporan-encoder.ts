@@ -2,6 +2,7 @@ import { CHAR_WIDTHS } from './types'
 import { loadReceiptLogo } from './logo'
 import { centerText, createWriter, placeColumns, rightText } from './layout'
 import { DEFAULT_BRANCH_NAME, formatBranchLine } from '@/lib/branch-config'
+import { formatWibTime } from '@/lib/time'
 import {
   initPrinter,
   feedAndCut,
@@ -50,8 +51,7 @@ export interface LaporanData {
 }
 
 function clock(iso: string | null | undefined): string {
-  if (!iso) return '-'
-  return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+  return formatWibTime(iso)
 }
 
 function metodeLabel(method: string): string {

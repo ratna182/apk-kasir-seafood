@@ -8,6 +8,7 @@ import { printer } from '@/lib/printer'
 import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeLaporan, type LaporanData } from '@/lib/printer/laporan-encoder'
 import { formatBranchLine } from '@/lib/branch-config'
+import { formatWibDateTime } from '@/lib/time'
 
 interface RekapItem {
   namaMenu: string
@@ -27,6 +28,7 @@ interface KasirSesi {
   id: string
   tanggal: string
   ditutupPada: string
+  dibukaPada: string | null
   dibukaKembaliPada: string | null
   ditutupOleh: string
   totalTransaksi: number
@@ -155,10 +157,8 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
   }
   const tanggal = new Date(sesi.tanggal + 'T00:00:00')
   const tanggalStr = tanggal.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const bukaStr = sesi.dibukaKembaliPada
-    ? new Date(sesi.dibukaKembaliPada).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-    : '-'
-  const tutupStr = new Date(sesi.ditutupPada).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+  const bukaStr = formatWibDateTime(sesi.dibukaPada ?? sesi.dibukaKembaliPada)
+  const tutupStr = formatWibDateTime(sesi.ditutupPada)
 
   function buildLaporanData(): LaporanData {
     return {

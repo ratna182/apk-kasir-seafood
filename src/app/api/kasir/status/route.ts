@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
       data: {
         hariIni: state.today.toISOString().split('T')[0],
         sudahTutup: state.isClosed,
+        dibukaPada: state.latest?.dibukaPada ?? state.latest?.dibukaKembaliPada ?? null,
         ditutupPada: state.isClosed ? sesi?.ditutupPada : null,
         totalTransaksi: state.isClosed ? sesi?.totalTransaksi || 0 : 0,
         totalPendapatan: state.isClosed ? sesi?.totalPendapatan || 0 : 0,

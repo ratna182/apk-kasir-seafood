@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
         data: {
           warungId,
           tanggal: state.today,
+          dibukaPada: state.sessionStart,
           ditutupOleh: userId,
           ditutupPada: closedAt,
           totalTransaksi,
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         tanggal: result.state.today.toISOString().split('T')[0],
+        dibukaPada: result.sesi.dibukaPada,
         ditutupPada: result.sesi.ditutupPada,
         totalTransaksi: result.totalTransaksi,
         totalPendapatan: result.totalPendapatan,

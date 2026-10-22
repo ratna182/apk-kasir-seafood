@@ -35,6 +35,7 @@ const closedSession = {
   warungId: 'warung1',
   tanggal: new Date('2026-09-14'),
   ditutupOleh: 'kasir1',
+  dibukaPada: null,
   ditutupPada: new Date('2026-09-14T04:00:00.000Z'),
   dibukaKembaliPada: null,
   totalTransaksi: 2,
@@ -109,7 +110,7 @@ describe('Cashier session lifecycle', () => {
     expect(response.status).toBe(200)
     expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: closedSession.id, dibukaKembaliPada: null },
-      data: { dibukaKembaliPada: expect.any(Date) },
+      data: expect.objectContaining({ dibukaPada: expect.any(Date), dibukaKembaliPada: expect.any(Date) }),
     }))
   })
 })

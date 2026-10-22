@@ -34,3 +34,25 @@ export function getStoreDateKey(now: Date = new Date()): string {
 export function getStoreTimeZone(): string {
   return STORE_TIME_ZONE
 }
+
+export function formatWibDateTime(value: Date | string | null | undefined): string {
+  if (!value) return '-'
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: STORE_TIME_ZONE,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+export function formatWibTime(value: Date | string | null | undefined): string {
+  if (!value) return '-'
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: STORE_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}

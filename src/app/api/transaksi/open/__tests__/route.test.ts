@@ -22,6 +22,7 @@ const session = {
   warungId: 'warung1',
   tanggal: new Date('2026-09-14'),
   ditutupOleh: 'kasir1',
+  dibukaPada: null,
   ditutupPada: new Date('2026-09-14T04:00:00.000Z'),
   dibukaKembaliPada: new Date('2026-09-14T05:00:00.000Z'),
   totalTransaksi: 1,

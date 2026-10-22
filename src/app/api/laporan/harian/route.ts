@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
 import { getKasirSessionState } from '@/lib/kasir-session'
 import { getStoreDateKey } from '@/lib/time'
+import { compareIndonesian } from '@/lib/menu-sort'
 
 // GET /api/laporan/harian — rekap penjualan hari ini per menu
 // Query params: warung_id (required untuk owner, optional untuk kasir)
@@ -116,12 +117,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Urutkan: Makanan dulu, lalu Minuman; dalam kategori alphabetically
+    // Sort categories and menu names consistently for the report.
     const rekap = Array.from(rekapMap.values()).sort((a, b) => {
-      if (a.kategori !== b.kategori) {
-        return a.kategori === 'MAKANAN' ? -1 : 1
-      }
-      return a.namaMenu.localeCompare(b.namaMenu)
+      const categoryOrder = compareIndonesian(a.kategori, b.kategori)
+      return categoryOrder || compareIndonesian(a.namaMenu, b.namaMenu)
     })
 
     return NextResponse.json({

@@ -8,6 +8,7 @@ import { printer } from '@/lib/printer'
 import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeLaporan } from '@/lib/printer/laporan-encoder'
 import { formatBranchLine } from '@/lib/branch-config'
+import { formatWibDateTime } from '@/lib/time'
 
 interface RekapItem {
   namaMenu: string
@@ -45,6 +46,7 @@ interface LaporanDataLocal {
 }
 
 interface KasirSesiInfo {
+  dibukaPada: string | null
   ditutupPada: string
   ditutupOleh: string
   totalTransaksi: number
@@ -61,12 +63,14 @@ interface LaporanClientProps {
   role: string
   initialData: LaporanDataLocal | null
   initialKasirSesi: KasirSesiInfo | null
+  initialDibukaPada: string | null
 }
 
-export default function LaporanClient({ warungId, warungNama, warungKode, warungs, role, initialData, initialKasirSesi }: LaporanClientProps) {
+export default function LaporanClient({ warungId, warungNama, warungKode, warungs, role, initialData, initialKasirSesi, initialDibukaPada }: LaporanClientProps) {
   const [data, setData] = useState<LaporanDataLocal | null>(initialData)
   const [loading, setLoading] = useState(!initialData)
   const [kasirSesi, setKasirSesi] = useState<KasirSesiInfo | null>(initialKasirSesi)
+  const [dibukaPada, setDibukaPada] = useState<string | null>(initialDibukaPada)
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [closing, setClosing] = useState(false)
   const [opening, setOpening] = useState(false)
@@ -95,7 +99,9 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
         if (cancelled) return
         const statusResult = await statusRes.json()
         if (statusResult.success) {
+          setDibukaPada(statusResult.data.dibukaPada)
           setKasirSesi(statusResult.data.sudahTutup ? {
+            dibukaPada: statusResult.data.dibukaPada,
             ditutupPada: statusResult.data.ditutupPada,
             ditutupOleh: 'Kasir',
             totalTransaksi: statusResult.data.totalTransaksi,
@@ -117,7 +123,9 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
         if (cancelled) return
         if (laporanResult.success) setData(laporanResult.data)
         if (statusResult.success) {
+          setDibukaPada(statusResult.data.dibukaPada)
           setKasirSesi(statusResult.data.sudahTutup ? {
+            dibukaPada: statusResult.data.dibukaPada,
             ditutupPada: statusResult.data.ditutupPada,
             ditutupOleh: 'Kasir',
             totalTransaksi: statusResult.data.totalTransaksi,
@@ -154,6 +162,7 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
     const result = await res.json()
     if (!result.success) return false
     const closedSession = result.data.sudahTutup ? {
+      dibukaPada: result.data.dibukaPada,
       ditutupPada: result.data.ditutupPada,
       ditutupOleh: 'Kasir',
       totalTransaksi: result.data.totalTransaksi,
@@ -173,7 +182,8 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
       })
       const result = await res.json()
       if (result.success) {
-        setKasirSesi({ ditutupPada: result.data.ditutupPada, ditutupOleh: currentWarungNama, totalTransaksi: result.data.totalTransaksi, totalPendapatan: result.data.totalPendapatan })
+        setKasirSesi({ dibukaPada: result.data.dibukaPada, ditutupPada: result.data.ditutupPada, ditutupOleh: currentWarungNama, totalTransaksi: result.data.totalTransaksi, totalPendapatan: result.data.totalPendapatan })
+        setDibukaPada(result.data.dibukaPada)
         setShowCloseModal(false)
         setFeedback({ type: 'success', message: 'Kasir hari ini telah berhasil ditutup! Anda dapat mencetak laporan penutupan sekarang.' })
         fetchLaporan()
@@ -376,7 +386,7 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
             <strong>Status Kasir: Ditutup</strong>
             <p style={{ margin: 0, fontSize: '0.85rem' }}>
               Shift kasir hari ini telah resmi ditutup pada{' '}
-              <strong>{new Date(kasirSesi.ditutupPada).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</strong>{' '}
+              <strong>{formatWibDateTime(kasirSesi.ditutupPada)}</strong>{' '}
               oleh <strong>{kasirSesi.ditutupOleh}</strong>.
             </p>
           </div>
@@ -385,7 +395,7 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
         <div className="alert alert-success no-print" style={{ marginBottom: '1.5rem' }}>
           <div>
             <strong>Status Kasir: Buka</strong>
-            <p style={{ margin: 0, fontSize: '0.85rem' }}>Kasir aktif beroperasi menerima pesanan. Anda dapat menutup shift kasir di akhir hari.</p>
+            <p style={{ margin: 0, fontSize: '0.85rem' }}>Dibuka pada {formatWibDateTime(dibukaPada)}. Kasir aktif beroperasi menerima pesanan.</p>
           </div>
         </div>
       )}

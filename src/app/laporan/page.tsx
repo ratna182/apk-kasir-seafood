@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar'
 import AutoRefresh from '@/components/AutoRefresh'
 import LaporanClient from './LaporanClient'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
+import { compareIndonesian } from '@/lib/menu-sort'
 
 export const metadata = {
   title: `Laporan Harian & Tutup Kasir — ${DEFAULT_BRANCH_NAME}`,
@@ -97,8 +98,8 @@ export default async function LaporanPage() {
   }
 
   const rekap = Array.from(rekapMap.values()).sort((a, b) => {
-    if (a.kategori !== b.kategori) return a.kategori === 'MAKANAN' ? -1 : 1
-    return a.namaMenu.localeCompare(b.namaMenu)
+    const categoryOrder = compareIndonesian(a.kategori, b.kategori)
+    return categoryOrder || compareIndonesian(a.namaMenu, b.namaMenu)
   })
 
   const laporanData = {
@@ -125,8 +126,10 @@ export default async function LaporanPage() {
     })),
   }
 
+  const dibukaPada = state.latest?.dibukaPada?.toISOString() ?? state.latest?.dibukaKembaliPada?.toISOString() ?? null
   const kasirSesi = state.isClosed && state.latest
     ? {
+        dibukaPada,
         ditutupPada: state.latest.ditutupPada.toISOString(),
         ditutupOleh: 'Kasir',
         totalTransaksi: state.latest.totalTransaksi,
@@ -158,6 +161,7 @@ export default async function LaporanPage() {
           role={role}
           initialData={laporanData}
           initialKasirSesi={kasirSesi}
+          initialDibukaPada={dibukaPada}
         />
       </div>
     </div>

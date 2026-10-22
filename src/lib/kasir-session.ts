@@ -31,7 +31,7 @@ export async function getKasirSessionState(db: KasirSessionDb, warungId: string,
     dayStart: today,
     dayEnd: tomorrow,
     // The closed-cycle export instead covers one shift, from the reopening to the close.
-    sessionStart: latest?.dibukaKembaliPada ?? previous?.dibukaKembaliPada ?? today,
+    sessionStart: latest?.dibukaPada ?? latest?.dibukaKembaliPada ?? previous?.dibukaPada ?? previous?.dibukaKembaliPada ?? today,
     sessionEnd: isClosed ? latest!.ditutupPada : now,
   }
 }

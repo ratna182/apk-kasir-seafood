@@ -143,6 +143,7 @@ model KasirSesi {
   warungId            String    @map("warung_id")
   tanggal             DateTime  @map("tanggal") @db.Date
   ditutupOleh         String    @map("ditutup_oleh")
+  dibukaPada          DateTime? @map("dibuka_pada")
   ditutupPada         DateTime  @default(now()) @map("ditutup_pada")
   dibukaKembaliPada   DateTime? @map("dibuka_kembali_pada")
   totalTransaksi      Int       @map("total_transaksi")

@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       if (state.latest && state.isClosed) {
         const updated = await tx.kasirSesi.updateMany({
           where: { id: state.latest.id, dibukaKembaliPada: null },
-          data: { dibukaKembaliPada: openedAt },
+          data: { dibukaPada: openedAt, dibukaKembaliPada: openedAt },
         })
         return updated.count === 1 ? 'REOPENED' : 'ALREADY_OPEN'
       }
@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
         data: {
           warungId,
           tanggal: state.today,
+          dibukaPada: openedAt,
           dibukaKembaliPada: openedAt,
           ditutupOleh: userId,
           totalTransaksi: 0,
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: result === 'REOPENED' ? 'Kasir berhasil dibuka kembali.' : 'Kasir berhasil dibuka dengan sesi transaksi baru.',
+      data: { dibukaPada: openedAt },
     })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {

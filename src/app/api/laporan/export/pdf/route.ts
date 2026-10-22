@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { compareIndonesian } from '@/lib/menu-sort'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
 import { getKasirSessionState } from '@/lib/kasir-session'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -99,10 +100,8 @@ export async function GET(request: NextRequest) {
     }
 
     const rekap = Array.from(rekapMap.values()).sort((a, b) => {
-      if (a.kategori !== b.kategori) {
-        return a.kategori === 'MAKANAN' ? -1 : 1
-      }
-      return a.namaMenu.localeCompare(b.namaMenu)
+      const categoryOrder = compareIndonesian(a.kategori, b.kategori)
+      return categoryOrder || compareIndonesian(a.namaMenu, b.namaMenu)
     })
 
     // Buat PDF

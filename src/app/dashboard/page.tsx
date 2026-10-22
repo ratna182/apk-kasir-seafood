@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { getKasirSessionState } from '@/lib/kasir-session'
-import { getStoreDayRange } from '@/lib/time'
+import { formatWibDateTime, getStoreDayRange } from '@/lib/time'
 import Navbar from '@/components/Navbar'
 import AutoRefresh from '@/components/AutoRefresh'
 import Link from 'next/link'
@@ -219,7 +219,7 @@ export default async function DashboardPage() {
             <div>
               <strong>Kasir Sudah Ditutup</strong>
               <p style={{ margin: 0, fontSize: '0.8rem' }}>
-                Ditutup pada {new Date(kasirSesi!.ditutupPada).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}.
+                Ditutup pada {formatWibDateTime(kasirSesi!.ditutupPada)}.
                 Transaksi baru dapat dibuat mulai besok.
               </p>
             </div>
@@ -228,7 +228,9 @@ export default async function DashboardPage() {
           <div className="alert alert-success" style={{ marginBottom: '1.5rem' }}>
             <div>
               <strong>Kasir Buka</strong>
-              <p style={{ margin: 0, fontSize: '0.8rem' }}>Siap menerima pesanan.</p>
+              <p style={{ margin: 0, fontSize: '0.8rem' }}>
+                Dibuka pada {formatWibDateTime(kasirSesi?.dibukaPada ?? kasirSesi?.dibukaKembaliPada)}. Siap menerima pesanan.
+              </p>
             </div>
           </div>
         )}

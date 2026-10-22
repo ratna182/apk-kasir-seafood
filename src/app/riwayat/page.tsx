@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import Navbar from '@/components/Navbar'
 import RiwayatClient from './RiwayatClient'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
+import { compareIndonesian } from '@/lib/menu-sort'
 
 export const metadata = {
   title: `Riwayat Laporan Harian — ${DEFAULT_BRANCH_NAME}`,
@@ -70,7 +71,7 @@ export default async function RiwayatPage({
         orderBy: { ditutupPada: 'desc' },
       })
       // Start = when this session was opened (dibukaKembaliPada of previous sesi, or midnight for first session)
-      effectiveStart = previousSesi?.dibukaKembaliPada ?? s.tanggal
+      effectiveStart = s.dibukaPada ?? previousSesi?.dibukaPada ?? previousSesi?.dibukaKembaliPada ?? s.tanggal
       // End = this session's ditutupPada (exact close time)
       effectiveEnd = s.ditutupPada
     } else {
@@ -126,14 +127,15 @@ export default async function RiwayatPage({
     }
 
     const rekap = Array.from(rekapMap.values()).sort((a, b) => {
-      if (a.kategori !== b.kategori) return a.kategori === 'MAKANAN' ? -1 : 1
-      return a.namaMenu.localeCompare(b.namaMenu)
+      const categoryOrder = compareIndonesian(a.kategori, b.kategori)
+      return categoryOrder || compareIndonesian(a.namaMenu, b.namaMenu)
     })
 
     return {
       id: s.id,
       tanggal: s.tanggal.toISOString().split('T')[0],
       ditutupPada: s.ditutupPada.toISOString(),
+      dibukaPada: s.dibukaPada?.toISOString() ?? null,
       dibukaKembaliPada: s.dibukaKembaliPada?.toISOString() ?? null,
       ditutupOleh: s.user.namaLengkap || s.user.username,
       totalTransaksi: transaksisSesi.length > 0 ? transaksisSesi.length : s.totalTransaksi,

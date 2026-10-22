@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const categories = await prisma.menuCategory.findMany({
       where: { warungId },
       include: { _count: { select: { menus: true } } },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { nama: 'asc' },
     })
 
     return NextResponse.json({ success: true, data: categories })

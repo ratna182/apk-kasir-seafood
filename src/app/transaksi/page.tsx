@@ -36,7 +36,7 @@ export default async function TransaksiPage() {
     prisma.menu.findMany({
       where: { warungId: activeSession.warungId, isAktif: true },
       include: { category: { select: { id: true, nama: true } } },
-      orderBy: [{ sortOrder: 'asc' }, { nama: 'asc' }],
+      orderBy: [{ category: { nama: 'asc' } }, { nama: 'asc' }],
     }),
     prisma.warungMenu.findMany({
       where: { warungId: activeSession.warungId },
