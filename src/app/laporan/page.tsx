@@ -6,9 +6,10 @@ import { redirect } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import AutoRefresh from '@/components/AutoRefresh'
 import LaporanClient from './LaporanClient'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export const metadata = {
-  title: 'Laporan Harian & Tutup Kasir — Kasir Vian Jaya 08',
+  title: `Laporan Harian & Tutup Kasir — ${DEFAULT_BRANCH_NAME}`,
   description: 'Rekapitulasi penjualan harian dan penutupan shift kasir.',
 }
 

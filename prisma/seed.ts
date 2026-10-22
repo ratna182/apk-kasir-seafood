@@ -16,7 +16,7 @@ async function main() {
   await prisma.warung.deleteMany()
 
   const warung1 = await prisma.warung.create({
-    data: { nama: 'Seafood & Nasi Uduk Vian Jaya 08 - Cabang 1', kode: 'VJ08-1' },
+    data: { nama: 'Seafood Vian Jaya 08 (Kranggan)', kode: 'VJ08-1' },
   })
   const warung2 = await prisma.warung.create({
     data: { nama: 'Seafood & Nasi Uduk Vian Jaya 08 - Cabang 2', kode: 'VJ08-2' },

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
 import { getKasirSessionState } from '@/lib/kasir-session'
 import ExcelJS from 'exceljs'
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     // Buat workbook Excel
     const workbook = new ExcelJS.Workbook()
-    workbook.creator = 'Kasir Vian Jaya 08'
+    workbook.creator = DEFAULT_BRANCH_NAME
     workbook.created = new Date()
 
     // Sheet 1: Rekap Harian

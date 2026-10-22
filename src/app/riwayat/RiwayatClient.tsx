@@ -7,6 +7,7 @@ import PrinterStatusBadge from '@/components/PrinterStatus'
 import { printer } from '@/lib/printer'
 import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeLaporan, type LaporanData } from '@/lib/printer/laporan-encoder'
+import { formatBranchLine } from '@/lib/branch-config'
 
 interface RekapItem {
   namaMenu: string
@@ -237,7 +238,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
 
           <div style={{ borderTop: '1px dashed var(--color-border)', borderBottom: '1px dashed var(--color-border)', padding: '0.5rem 0', marginBottom: '0.75rem', fontSize: '0.85rem', fontWeight: 700 }}>
             <div>Tanggal: {sesi.tanggal}</div>
-            <div>Cabang: {sesi.warungNama}</div>
+            <div>{formatBranchLine(sesi.warungNama)}</div>
             <div>Status: SUDAH DITUTUP</div>
             <div>Pkl: {tutupStr}</div>
           </div>
@@ -369,7 +370,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
           </div>
 
           <div style={{ borderTop: '1px dashed var(--color-border)', marginTop: '0.5rem', paddingTop: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-            *** REKAPITULASI RESMI ***<br />Kasir Vian Jaya 08
+            *** REKAPITULASI RESMI ***<br />{sesi.warungNama}
           </div>
         </div>
       )}
@@ -391,7 +392,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
         <div className="print-divider" />
         <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
           <div>Tanggal: {sesi.tanggal}</div>
-          <div>Cabang: {sesi.warungNama}</div>
+          <div>{formatBranchLine(sesi.warungNama)}</div>
           <div>Status: SUDAH DITUTUP</div>
           <div>Pkl: {tutupStr}</div>
         </div>
@@ -452,7 +453,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
         <div className="print-divider" />
         <div className="print-footer">
           <p>*** REKAPITULASI RESMI ***</p>
-          <p>Kasir Vian Jaya 08</p>
+          <p>{sesi.warungNama}</p>
         </div>
       </div>
     </div>

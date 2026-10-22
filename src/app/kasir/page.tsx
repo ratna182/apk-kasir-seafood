@@ -3,9 +3,10 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import Navbar from '@/components/Navbar'
 import KasirManager from './KasirManager'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export const metadata = {
-  title: 'Manajemen Kasir — Kasir Vian Jaya 08',
+  title: `Manajemen Kasir — ${DEFAULT_BRANCH_NAME}`,
   description: 'Kelola akun kasir untuk setiap outlet.',
 }
 

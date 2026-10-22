@@ -3,9 +3,10 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import Navbar from '@/components/Navbar'
 import RiwayatClient from './RiwayatClient'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export const metadata = {
-  title: 'Riwayat Laporan Harian — Kasir Vian Jaya 08',
+  title: `Riwayat Laporan Harian — ${DEFAULT_BRANCH_NAME}`,
   description: 'Riwayat sesi kasir (buka/tutup) dan laporan keuangan harian.',
 }
 

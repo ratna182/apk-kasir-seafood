@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma'
 import { getKasirSessionState } from '@/lib/kasir-session'
 import Navbar from '@/components/Navbar'
 import TransaksiClient from './TransaksiClient'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export const metadata = {
-  title: 'Buat Transaksi — Kasir Vian Jaya 08',
+  title: `Buat Transaksi — ${DEFAULT_BRANCH_NAME}`,
   description: 'Catat pesanan tamu, hitung total, dan cetak struk thermal 80mm.',
 }
 

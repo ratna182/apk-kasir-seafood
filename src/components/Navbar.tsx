@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { LayoutDashboard, BarChart3, UtensilsCrossed, Users, Plus, History, User, DollarSign, Activity, Printer } from 'lucide-react'
 import LogoutButton from './LogoutButton'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 interface NavbarProps {
   session: {
@@ -23,7 +24,7 @@ export default function Navbar({ session, activePage }: NavbarProps) {
         <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'inherit' }}>
           <div className="navbar-logo">VJ</div>
           <div>
-            <div className="navbar-title">Vian Jaya</div>
+            <div className="navbar-title">{session.warungNama || DEFAULT_BRANCH_NAME}</div>
             <div className="navbar-subtitle">Seafood &amp; Nasi Uduk</div>
           </div>
         </Link>

@@ -1,6 +1,7 @@
 import { CHAR_WIDTHS } from './types'
 import { loadReceiptLogo } from './logo'
 import { centerText, createWriter, placeColumns, rightText } from './layout'
+import { DEFAULT_BRANCH_NAME, formatBranchLine } from '@/lib/branch-config'
 import {
   initPrinter,
   feedAndCut,
@@ -95,7 +96,7 @@ export async function encodeLaporan(
   parts.push(emit(drawLine(w)))
 
   parts.push(center(`Tanggal: ${data.tanggal}`))
-  parts.push(center(`Cabang: ${data.warung.nama || warungAlamat || '-'}`))
+  parts.push(center(formatBranchLine(data.warung.nama)))
   if (kasirSesi) {
     parts.push(center('Status: SUDAH DITUTUP'))
     parts.push(center(`Pkl: ${clock(kasirSesi.ditutupPada)}`))
@@ -214,7 +215,7 @@ export async function encodeLaporan(
 
   parts.push(emit(drawLine(w)))
   parts.push(center('*** REKAPITULASI RESMI ***'))
-  parts.push(center(cashierName || 'Kasir Vian Jaya 08'))
+  parts.push(center(cashierName || DEFAULT_BRANCH_NAME))
 
   parts.push(setLineSpacing(20))
   parts.push(feedAndCut(CUT_FEED_LINES))

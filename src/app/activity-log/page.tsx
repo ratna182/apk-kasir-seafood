@@ -2,9 +2,10 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import Navbar from '@/components/Navbar'
 import ActivityLogClient from './ActivityLogClient'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export const metadata = {
-  title: 'Realtime Log Activity — Kasir Vian Jaya 08',
+  title: `Realtime Log Activity — ${DEFAULT_BRANCH_NAME}`,
 }
 
 export default async function ActivityLogPage() {

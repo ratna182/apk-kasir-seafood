@@ -7,6 +7,7 @@ import PrinterStatusBadge from '@/components/PrinterStatus'
 import { printer } from '@/lib/printer'
 import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeLaporan } from '@/lib/printer/laporan-encoder'
+import { formatBranchLine } from '@/lib/branch-config'
 
 interface RekapItem {
   namaMenu: string
@@ -544,7 +545,7 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
           <div className="print-divider" />
           <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
             <div>Tanggal: {data.tanggal}</div>
-            <div>Dicetak: {new Date().toLocaleTimeString('id-ID')} | Cabang: {currentWarungNama}</div>
+            <div>Dicetak: {new Date().toLocaleTimeString('id-ID')} | {formatBranchLine(currentWarungNama)}</div>
             {kasirSesi && (
               <>
                 <div>Status: SUDAH DITUTUP</div>
@@ -615,7 +616,7 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
           <div className="print-divider" />
           <div className="print-footer">
             <p>*** REKAPITULASI RESMI ***</p>
-            <p>Kasir Vian Jaya 08</p>
+            <p>{currentWarungNama}</p>
           </div>
         </div>
       )}

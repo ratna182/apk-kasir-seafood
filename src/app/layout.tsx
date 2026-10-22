@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Fraunces } from 'next/font/google'
 import './globals.css'
 import { ToastProvider } from '@/components/Toast'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -25,8 +26,8 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Kasir Vian Jaya 08 — Seafood & Nasi Uduk',
-  description: 'Aplikasi kasir untuk Warung Seafood & Nasi Uduk Vian Jaya 08',
+  title: `Kasir ${DEFAULT_BRANCH_NAME}`,
+  description: `Aplikasi kasir untuk ${DEFAULT_BRANCH_NAME}`,
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

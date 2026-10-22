@@ -1,5 +1,7 @@
 'use client'
 
+import { formatBranchLine } from '@/lib/branch-config'
+
 export type PrinterWidth = '58mm' | '80mm'
 
 export interface ReceiptTransaction {
@@ -27,7 +29,7 @@ interface ReceiptProps {
 
 const rupiah = (amount: number) => `Rp ${amount.toLocaleString('id-ID')}`
 
-export default function Receipt({ transaction, cashier, warungAlamat, width, preview, reprint, uangDiterima, kembalian }: ReceiptProps) {
+export default function Receipt({ transaction, cashier, warungNama, warungAlamat, width, preview, reprint, uangDiterima, kembalian }: ReceiptProps) {
   const date = new Date(transaction.createdAt)
   const totalQty = transaction.items.reduce((total, item) => total + item.qty, 0)
   const payment = transaction.metodePembayaran === 'QRIS' ? 'QRIS' : transaction.metodePembayaran === 'TRANSFER' ? 'Transfer' : 'Cash'
@@ -40,6 +42,7 @@ export default function Receipt({ transaction, cashier, warungAlamat, width, pre
       <div className="print-header">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img className="receipt-logo" src="/logo-struk.webp" alt="Seafood 08 Vian Jaya" />
+        <p className="receipt-branch">{formatBranchLine(warungNama)}</p>
         {warungAlamat && <p>{warungAlamat}</p>}
         <div className="receipt-socials">
           <p>IG : Seafood08vianjaya.id</p>

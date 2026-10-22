@@ -86,7 +86,7 @@ describe('encodeLaporan', () => {
       'IG : Seafood08vianjaya.id',
       'LAPORAN PENJUALAN HARIAN',
       'Tanggal: 2026-09-16',
-      'Cabang: Seafood & Nasi Uduk Vian Jaya 08 -',
+      'Cabang : Seafood & Nasi Uduk Vian Jaya 08 -',
       'Status: SUDAH DITUTUP',
       'DAFTAR TRANSAKSI',
       'DETAIL KASIR',

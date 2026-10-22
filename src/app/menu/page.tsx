@@ -2,9 +2,10 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import Navbar from '@/components/Navbar'
 import MenuManager from './MenuManager'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export const metadata = {
-  title: 'Kelola Menu — Kasir Vian Jaya 08',
+  title: `Kelola Menu — ${DEFAULT_BRANCH_NAME}`,
   description: 'Manajemen daftar menu, harga, dan ketersediaan menu warung.',
 }
 

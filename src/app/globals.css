@@ -896,6 +896,7 @@ input[type='checkbox']:checked::after { transform: rotate(45deg) scale(1); }
 /* Compact mode for >8 items */
 .receipt-preview.compact { font-size: 11px; line-height: 1.4; }
 .receipt-logo { display: block; width: 1.7cm; height: 1.7cm; object-fit: contain; margin: 0 auto 3px; }
+.receipt-branch { overflow-wrap: anywhere; }
 .receipt-socials { display: grid; gap: 1px; justify-content: center; margin-top: 2px; font-size: 11px; line-height: 1.25; }
 .receipt-socials p { margin: 0; text-align: center; }
 .receipt-socials span, .receipt-contact { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import Image from 'next/image'
 import { Eye, EyeOff } from 'lucide-react'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -80,7 +81,7 @@ export default function LoginPage() {
           {/* Logo & branding */}
           <div className="login-header">
             <div className="login-logo">VJ</div>
-            <h1 className="login-title">Vian Jaya 08</h1>
+            <h1 className="login-title">{DEFAULT_BRANCH_NAME}</h1>
             <p className="login-subtitle">Seafood & Nasi Uduk</p>
             <p className="login-desc">Sistem Kasir Digital</p>
           </div>
@@ -152,7 +153,7 @@ export default function LoginPage() {
           </form>
 
           <p className="login-footer">
-            Kasir Vian Jaya 08 — v1.0
+            Kasir {DEFAULT_BRANCH_NAME} — v1.0
           </p>
         </div>
       </div>

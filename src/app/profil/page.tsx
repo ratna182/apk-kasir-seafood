@@ -2,9 +2,10 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import Navbar from '@/components/Navbar'
 import ProfilClient from './ProfilClient'
+import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
 export const metadata = {
-  title: 'Profil — Kasir Vian Jaya 08',
+  title: `Profil — ${DEFAULT_BRANCH_NAME}`,
   description: 'Lihat dan update profil akun Anda.',
 }
 

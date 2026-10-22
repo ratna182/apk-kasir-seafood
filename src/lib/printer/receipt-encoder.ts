@@ -1,6 +1,7 @@
 import { CHAR_WIDTHS } from './types'
 import { loadReceiptLogo } from './logo'
 import { createWriter, rightText } from './layout'
+import { formatBranchLine } from '@/lib/branch-config'
 import {
   initPrinter,
   feedAndCut,
@@ -71,6 +72,7 @@ export async function encodeReceipt(
   }
 
   parts.push(center('Seafood Vian Jaya 08', { scale: 2 }))
+  parts.push(center(formatBranchLine(data.warungNama)))
   if (data.warungAlamat) parts.push(center(data.warungAlamat))
   parts.push(center('IG : Seafood08vianjaya.id'))
   parts.push(center('FB : Seafood08vianjaya'))
