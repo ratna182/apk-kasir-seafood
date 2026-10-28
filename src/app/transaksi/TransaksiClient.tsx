@@ -55,6 +55,11 @@ type ActiveOrder = CompletedTransaksi & {
   minutesOpen: number
 }
 
+type ReceiptPaymentMeta = {
+  uangDiterima: number
+  kembalian: number
+}
+
 interface TransaksiClientProps {
   session: {
     warungNama: string | null
@@ -71,6 +76,13 @@ interface TransaksiClientProps {
 }
 
 const TABLE_SECTION_GAP = '__table-section-gap__'
+
+function createIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().replaceAll('-', '')
+  }
+  return `${Date.now()}${Math.random().toString(36).slice(2)}`
+}
 
 export default function TransaksiClient({ session, menus: initialMenus, initialActiveOrders, isKasirClosed, isShiftOvertime }: TransaksiClientProps) {
   const isKranggan = session.username.toLowerCase().includes('kranggan') || session.warungNama?.toLowerCase().includes('kranggan')
@@ -96,11 +108,18 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   const [qtyPickerPos, setQtyPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const [qtyPickerPlacement, setQtyPickerPlacement] = useState<'above' | 'below'>('above')
   const qtyBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const printJobSeq = useRef(0)
 
   const [showPrinterSetup, setShowPrinterSetup] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [uangDiterima, setUangDiterima] = useState<number | ''>('')
   const [kembalianResult, setKembalianResult] = useState<ReturnType<typeof hitungKembalian> | null>(null)
+  const [receiptPayment, setReceiptPayment] = useState<ReceiptPaymentMeta | null>(null)
+  const [showBayarLangsung, setShowBayarLangsung] = useState(false)
+  const [bayarLangsungMetode, setBayarLangsungMetode] = useState<'CASH' | 'QRIS' | 'TRANSFER'>('CASH')
+  const [bayarLangsungUang, setBayarLangsungUang] = useState<number | ''>('')
+  const [bayarLangsungError, setBayarLangsungError] = useState('')
+  const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey)
 
   useEffect(() => {
     const saved = loadPrinterConfig()
@@ -184,10 +203,13 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     setError('')
     setSuccess('')
     setUangDiterima('')
+    setShowBayarLangsung(false)
+    resetIdempotencyKey()
   }
 
   function addToCart(menu: Menu) {
     if (isKasirClosed) return
+    resetIdempotencyKey()
     setCart((prev) => {
       const current = prev.find((item) => item.menuId === menu.id)
       if (current) {
@@ -201,16 +223,22 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
 
   function itemUnitPrice(item: CartItem) { return Math.max(0, (item.hargaSementara ?? item.harga) - item.diskonSatuan) }
 
+  function resetIdempotencyKey() {
+    setIdempotencyKey(createIdempotencyKey())
+  }
+
   function saveCartItemEdit() {
     if (!editingCartItem) return
     if (editingCartItem.diskonSatuan > (editingCartItem.hargaSementara ?? editingCartItem.harga)) {
       setError('Diskon tidak boleh melebihi harga satuan.'); return
     }
+    resetIdempotencyKey()
     setCart((prev) => prev.map((item) => item.menuId === editingCartItem.menuId ? editingCartItem : item))
     setEditingCartItem(null)
   }
 
   function updateQty(menuId: string, delta: number) {
+    resetIdempotencyKey()
     setCart((prev) =>
       prev
         .map((item) => {
@@ -225,21 +253,32 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   }
 
   function removeFromCart(menuId: string) {
+    resetIdempotencyKey()
     setCart((prev) => prev.filter((item) => item.menuId !== menuId))
   }
 
   function resetOrderInput() {
+    resetIdempotencyKey()
     setCart([])
     setNomorMeja('')
     setSelectedOrder(null)
     setError('')
     setSuccess('')
     setUangDiterima('')
+    setShowBayarLangsung(false)
+    setBayarLangsungUang('')
+    setBayarLangsungError('')
   }
 
   const grandTotal = useMemo(() => cart.reduce((sum, item) => sum + itemUnitPrice(item) * item.qty, 0), [cart])
   const totalItemCount = useMemo(() => cart.reduce((sum, item) => sum + item.qty, 0), [cart])
   const selectedItemCount = useMemo(() => selectedOrder?.items.reduce((sum, item) => sum + item.qty, 0) || 0, [selectedOrder])
+  const bayarLangsungTotal = grandTotal + (selectedOrder?.total ?? 0)
+  const bayarLangsungQuickAmounts = useMemo(() => generateQuickAmounts(bayarLangsungTotal), [bayarLangsungTotal])
+  const bayarLangsungKembalian = useMemo(() => {
+    if (bayarLangsungMetode !== 'CASH' || bayarLangsungUang === '' || bayarLangsungUang < 0) return null
+    return hitungKembalian(bayarLangsungUang, bayarLangsungTotal)
+  }, [bayarLangsungMetode, bayarLangsungUang, bayarLangsungTotal])
 
   async function handleCheckout() {
     setError('')
@@ -262,6 +301,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       if (data.success) {
         setSelectedOrder(data.data)
         setSuccess('Order sementara tersimpan. Cetak struk dilakukan saat pembayaran final.')
+        resetIdempotencyKey()
         setCart([])
         await loadActiveOrders()
       } else {
@@ -274,25 +314,22 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     }
   }
 
-  async function handlePrintReceipt() {
-    if (!completedTransaksi) return
-    
+  async function handlePrintTransaction(transaksi: CompletedTransaksi, payment: ReceiptPaymentMeta | null) {
     setPrinting(true)
     try {
-      // Use ESC/POS encoder for thermal printer (both Bluetooth & iMin)
       const encoded = await encodeReceipt({
-        transaction: completedTransaksi,
+        transaction: transaksi,
         cashier: session.namaLengkap || session.username,
         username: session.username,
         warungKode: session.warungKode,
         warungNama: session.warungNama,
         warungAlamat: session.warungAlamat,
         width: printerWidth,
-        uangDiterima: typeof uangDiterima === 'number' ? uangDiterima : undefined,
-        kembalian: kembalianResult?.kembalian
+        uangDiterima: payment?.uangDiterima,
+        kembalian: payment?.kembalian
       })
 
-      const jobId = `${completedTransaksi.id}-${Date.now()}`
+      const jobId = `${transaksi.id}-${printJobSeq.current++}`
       const result = await printer.printReceipt(encoded, jobId)
       const ok = typeof result === 'boolean' ? result : result.ok
       if (!ok) {
@@ -300,12 +337,19 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       } else {
         setSuccess('Struk terkirim ke printer')
       }
+      return ok
     } catch (e) {
       console.error('Print error:', e)
       setError(`Gagal mencetak: ${e instanceof Error ? e.message : 'Unknown error'}`)
+      return false
     } finally {
       setPrinting(false)
     }
+  }
+
+  async function handlePrintReceipt() {
+    if (!completedTransaksi) return
+    await handlePrintTransaction(completedTransaksi, receiptPayment)
   }
 
   async function handleUpdateSavedItem(itemId: string, qty: number) {
@@ -335,10 +379,98 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     const res = await fetch(`/api/transaksi/${orderId}`, { method: 'DELETE' })
     const data = await res.json()
     if (data.success) {
-      if (selectedOrder?.id === orderId) { setSelectedOrder(null); setNomorMeja('') }
+      if (selectedOrder?.id === orderId) { setSelectedOrder(null); setNomorMeja(''); resetIdempotencyKey() }
       await loadActiveOrders()
     } else {
       setError(data.message || 'Gagal menghapus pesanan.')
+    }
+  }
+
+  function openBayarLangsung() {
+    setError('')
+    setSuccess('')
+    if (isKasirClosed) { setError('Buka kasir terlebih dahulu.'); return }
+    if (!nomorMeja.trim()) { setError('Harap masukkan nomor meja atau pilih dari tombol meja.'); return }
+    if (cart.length === 0 && !selectedOrder) { setError('Keranjang pesanan masih kosong. Pilih menu di sebelah kiri.'); return }
+    setBayarLangsungMetode('CASH')
+    setBayarLangsungUang('')
+    setBayarLangsungError('')
+    setShowBayarLangsung(true)
+  }
+
+  async function handleBayarLangsung() {
+    if (isKasirClosed) { setBayarLangsungError('Buka kasir terlebih dahulu.'); return }
+    if (!nomorMeja.trim()) { setBayarLangsungError('Harap masukkan nomor meja atau pilih dari tombol meja.'); return }
+    if (cart.length === 0 && !selectedOrder) { setBayarLangsungError('Keranjang pesanan masih kosong.'); return }
+    if (bayarLangsungMetode === 'CASH') {
+      if (bayarLangsungUang === '') { setBayarLangsungError('Masukkan uang yang diterima.'); return }
+      if (bayarLangsungKembalian && !bayarLangsungKembalian.isValid) {
+        setBayarLangsungError(bayarLangsungKembalian.message)
+        return
+      }
+    }
+
+    setPaying(true)
+    setBayarLangsungError('')
+    setError('')
+    setSuccess('')
+    try {
+      const body: Record<string, unknown> = {
+        nomorMeja: nomorMeja.trim(),
+        orderId: selectedOrder?.id,
+        idempotencyKey,
+        metodePembayaran: bayarLangsungMetode,
+        items: cart.map((item) => ({
+          menuId: item.menuId,
+          qty: item.qty,
+          hargaSatuan: item.hargaSementara ?? item.harga,
+          diskonSatuan: item.diskonSatuan,
+          catatan: item.catatan,
+        })),
+      }
+      if (bayarLangsungMetode === 'CASH') {
+        body.uangDiterima = bayarLangsungUang
+      }
+
+      const res = await fetch('/api/transaksi/bayar-langsung', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setBayarLangsungError(data.message || 'Gagal memproses pembayaran.')
+        return
+      }
+
+      const payment = data.meta?.cash
+        ? { uangDiterima: Number(data.meta.cash.uangDiterima), kembalian: Number(data.meta.cash.kembalian) }
+        : null
+
+      setReceiptPayment(payment)
+      setCompletedTransaksi(data.data)
+      setShowBayarLangsung(false)
+      setShowReceiptModal(true)
+      resetIdempotencyKey()
+      setCart([])
+      setNomorMeja('')
+      setSelectedOrder(null)
+      setUangDiterima('')
+      setKembalianResult(null)
+      setError('')
+      setSuccess('')
+      await loadActiveOrders()
+
+      const printed = await handlePrintTransaction(data.data, payment)
+      if (!printed) {
+        setError('Dibayar, struk gagal dicetak. Periksa printer lalu klik Cetak Struk.')
+      } else {
+        setSuccess('Pembayaran berhasil dan struk terkirim ke printer.')
+      }
+    } catch {
+      setBayarLangsungError('Koneksi internet bermasalah. Gagal memproses pembayaran.')
+    } finally {
+      setPaying(false)
     }
   }
 
@@ -365,6 +497,11 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       })
       const data = await res.json()
       if (data.success) {
+        setReceiptPayment(
+          metodePembayaran === 'CASH' && typeof uangDiterima === 'number'
+            ? { uangDiterima, kembalian: kembalianResult?.kembalian ?? 0 }
+            : null
+        )
         setCompletedTransaksi(data.data)
         setShowReceiptModal(true)
         resetOrderInput()
@@ -382,6 +519,9 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   function handleNewOrder() {
     setShowReceiptModal(false)
     setCompletedTransaksi(null)
+    setReceiptPayment(null)
+    setError('')
+    setSuccess('')
   }
 
   return (
@@ -601,7 +741,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
               className="form-input"
               placeholder="Ketik nomor meja atau klik tombol di bawah..."
               value={nomorMeja}
-              onChange={(e) => setNomorMeja(e.target.value)}
+              onChange={(e) => { setNomorMeja(e.target.value); resetIdempotencyKey() }}
               style={{ marginBottom: '0.5rem', width: '100%' }}
               disabled={isKasirClosed}
             />
@@ -615,7 +755,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
                   onClick={() => {
                     const order = activeOrders.find((active) => active.nomorMeja === table)
                     if (order) selectOrder(order)
-                    else { setSelectedOrder(null); setNomorMeja(table) }
+                    else { setSelectedOrder(null); setNomorMeja(table); resetIdempotencyKey() }
                   }}
                   disabled={isKasirClosed}
                   className="btn btn-ghost btn-sm"
@@ -733,16 +873,28 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <button
-              type="button"
-              id="btn-simpan-transaksi"
-              onClick={handleCheckout}
-              disabled={isKasirClosed || submitting || cart.length === 0}
-              className="btn btn-primary w-full"
-              style={{ padding: '0.875rem', fontSize: '1rem', fontWeight: 700, justifyContent: 'center' }}
-            >
-              {submitting ? 'Menyimpan Order...' : 'Simpan Pesanan'}
-            </button>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1fr)', gap: '0.75rem' }}>
+              <button
+                type="button"
+                id="btn-bayar-langsung"
+                onClick={openBayarLangsung}
+                disabled={isKasirClosed || paying || submitting || (cart.length === 0 && !selectedOrder)}
+                className="btn btn-primary"
+                style={{ minHeight: '52px', padding: '0.875rem', fontSize: '1rem', fontWeight: 800, justifyContent: 'center' }}
+              >
+                {paying ? 'Memproses...' : 'BAYAR'}
+              </button>
+              <button
+                type="button"
+                id="btn-simpan-transaksi"
+                onClick={handleCheckout}
+                disabled={isKasirClosed || submitting || paying || cart.length === 0}
+                className="btn btn-ghost"
+                style={{ minHeight: '52px', padding: '0.875rem', fontSize: '0.95rem', fontWeight: 700, justifyContent: 'center', border: '1px solid var(--color-border)' }}
+              >
+                {submitting ? 'Menyimpan...' : 'SIMPAN'}
+              </button>
+            </div>
 
             {selectedOrder && (
               <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
@@ -829,7 +981,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       {qtyPickerMenuId && (
         <div onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', zIndex: 1100, background: 'var(--color-base)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)', padding: '0.35rem', display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: 'min(70vh, 420px)', overflowY: 'auto', transform: qtyPickerPlacement === 'above' ? 'translate(-50%, -100%)' : 'translateX(-50%)', top: qtyPickerPos.top + 'px', left: qtyPickerPos.left + 'px' }}>
           {[1,2,3,4,5,6,7,8,9,10].map((n) => (
-            <button key={n} type="button" onClick={() => { setCart((prev) => prev.map((ci) => ci.menuId === qtyPickerMenuId ? { ...ci, qty: n } : ci)); setQtyPickerMenuId(null) }} style={{ minWidth: '44px', minHeight: '38px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--color-text-primary)', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', textAlign: 'center' }}>
+            <button key={n} type="button" onClick={() => { resetIdempotencyKey(); setCart((prev) => prev.map((ci) => ci.menuId === qtyPickerMenuId ? { ...ci, qty: n } : ci)); setQtyPickerMenuId(null) }} style={{ minWidth: '44px', minHeight: '38px', border: 'none', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--color-text-primary)', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', textAlign: 'center' }}>
               {n}
             </button>
           ))}
@@ -856,6 +1008,115 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
         </div>
       )}
 
+      {showBayarLangsung && (
+        <div
+          className="modal-overlay no-print"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bayar-langsung-title"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 1000 }}
+          onClick={(event) => { if (event.target === event.currentTarget && !paying) setShowBayarLangsung(false) }}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: '440px', maxHeight: '92vh', overflowY: 'auto', padding: '1.25rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <h2 id="bayar-langsung-title" style={{ fontSize: '1.15rem', margin: 0 }}>Pembayaran Langsung</h2>
+                <p className="text-secondary" style={{ margin: '0.25rem 0 0', fontSize: '0.8rem' }}>Meja {nomorMeja}</p>
+              </div>
+              <button type="button" onClick={() => setShowBayarLangsung(false)} disabled={paying} className="btn btn-ghost" style={{ minWidth: '44px', minHeight: '44px', padding: 0, justifyContent: 'center' }} aria-label="Tutup">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '0.875rem', background: 'var(--color-accent-soft)', borderRadius: 'var(--radius-md)', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 600 }}>Total</span>
+                <strong style={{ fontSize: '1.35rem', fontFamily: 'var(--font-fraunces), serif', fontVariantNumeric: 'tabular-nums' }}>Rp {bayarLangsungTotal.toLocaleString('id-ID')}</strong>
+              </div>
+              {selectedOrder && (
+                <p className="text-secondary" style={{ margin: '0.35rem 0 0', fontSize: '0.75rem' }}>
+                  Termasuk order tersimpan Rp {selectedOrder.total.toLocaleString('id-ID')}
+                </p>
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
+              {(['CASH', 'QRIS', 'TRANSFER'] as const).map((method) => (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => { setBayarLangsungMetode(method); setBayarLangsungError('') }}
+                  className={`btn ${bayarLangsungMetode === method ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ minHeight: '48px', justifyContent: 'center', padding: '0.5rem' }}
+                >
+                  {method === 'CASH' ? <Banknote size={16} /> : <CreditCard size={16} />}
+                  {method}
+                </button>
+              ))}
+            </div>
+
+            {bayarLangsungMetode === 'CASH' && (
+              <div style={{ marginBottom: '1rem' }}>
+                <label htmlFor="bayar-langsung-uang" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
+                  Uang Diterima
+                </label>
+                <input
+                  id="bayar-langsung-uang"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  step="500"
+                  placeholder="Masukkan jumlah uang"
+                  value={bayarLangsungUang}
+                  onChange={(event) => setBayarLangsungUang(event.target.value === '' ? '' : Number(event.target.value))}
+                  className="form-input"
+                  style={{ fontSize: '1.25rem', padding: '0.75rem', width: '100%', fontWeight: 700, minHeight: '48px' }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                  {bayarLangsungQuickAmounts.map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setBayarLangsungUang(amount)}
+                      className={`btn btn-sm ${bayarLangsungUang === amount ? 'btn-primary' : 'btn-ghost'}`}
+                      style={{ minHeight: '40px', fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
+                    >
+                      {amount === bayarLangsungTotal ? 'Uang Pas' : `Rp ${amount.toLocaleString('id-ID')}`}
+                    </button>
+                  ))}
+                </div>
+                {bayarLangsungKembalian && (
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: bayarLangsungKembalian.isValid ? 'var(--color-success)' : 'var(--color-danger)', marginTop: '0.75rem', textAlign: 'center' }}>
+                    {bayarLangsungKembalian.message}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {bayarLangsungError && (
+              <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+                {bayarLangsungError}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '0.75rem' }}>
+              <button type="button" onClick={() => setShowBayarLangsung(false)} disabled={paying} className="btn btn-ghost" style={{ minHeight: '48px', justifyContent: 'center' }}>
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleBayarLangsung}
+                disabled={paying || (bayarLangsungMetode === 'CASH' && (!bayarLangsungKembalian || !bayarLangsungKembalian.isValid))}
+                className="btn btn-success"
+                style={{ minHeight: '48px', justifyContent: 'center', fontWeight: 800 }}
+              >
+                {paying ? 'Memproses...' : 'Bayar & Cetak'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL STRUK */}
       {showReceiptModal && completedTransaksi && (
         <div className="modal-overlay no-print" style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 1000, animation: 'fadeIn 0.2s ease-out' }}>
@@ -870,7 +1131,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
 
             {/* The D4-504 screen is short, so the preview scrolls and the buttons stay pinned. */}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-              <Receipt transaction={completedTransaksi} cashier={session.namaLengkap || session.username} username={session.username} warungKode={session.warungKode} warungNama={session.warungNama} warungAlamat={session.warungAlamat} width={printerWidth} preview uangDiterima={typeof uangDiterima === 'number' ? uangDiterima : undefined} kembalian={kembalianResult?.kembalian} />
+              <Receipt transaction={completedTransaksi} cashier={session.namaLengkap || session.username} username={session.username} warungKode={session.warungKode} warungNama={session.warungNama} warungAlamat={session.warungAlamat} width={printerWidth} preview uangDiterima={receiptPayment?.uangDiterima} kembalian={receiptPayment?.kembalian} />
               <div className="receipt-width-picker">
                 <span>Ukuran printer</span>
                 {(['58mm', '80mm'] as const).map((width) => <button key={width} type="button" onClick={() => setPrinterWidth(width)} className={`btn btn-sm ${printerWidth === width ? 'btn-primary' : 'btn-ghost'}`}>{width}</button>)}
@@ -906,7 +1167,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
 
       <PrinterSetup open={showPrinterSetup} onClose={() => setShowPrinterSetup(false)} onConfigured={(config) => { if (config) setPrinterWidth(config.width) }} />
 
-      {completedTransaksi && <Receipt transaction={completedTransaksi} cashier={session.namaLengkap || session.username} username={session.username} warungKode={session.warungKode} warungNama={session.warungNama} warungAlamat={session.warungAlamat} width={printerWidth} uangDiterima={typeof uangDiterima === 'number' ? uangDiterima : undefined} kembalian={kembalianResult?.kembalian} />}
+      {completedTransaksi && <Receipt transaction={completedTransaksi} cashier={session.namaLengkap || session.username} username={session.username} warungKode={session.warungKode} warungNama={session.warungNama} warungAlamat={session.warungAlamat} width={printerWidth} uangDiterima={receiptPayment?.uangDiterima} kembalian={receiptPayment?.kembalian} />}
     </div>
   )
 }

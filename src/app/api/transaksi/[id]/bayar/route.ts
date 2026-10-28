@@ -3,8 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getAuthContext, getKasirWarungId, requireKasirAccess } from '@/lib/auth'
 import { apiRateLimiter } from '@/lib/rate-limiter'
 import { getOpenShift } from '@/lib/kasir-shift'
-
-const DAILY_TRANSACTION_LIMIT = 150
+import { DAILY_TRANSACTION_LIMIT } from '@/lib/transaksi-checkout'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -55,9 +54,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
       if (completedInShift >= DAILY_TRANSACTION_LIMIT) return 'LIMIT'
 
-      return tx.transaksi.update({
-        where: { id },
+      const claimed = await tx.transaksi.updateMany({
+        where: { id, warungId, shiftId: shift.id, status: 'OPEN' },
         data: { status: 'SELESAI', metodePembayaran, printedAt: new Date() },
+      })
+      if (claimed.count !== 1) return 'CONFLICT'
+
+      return tx.transaksi.findUnique({
+        where: { id },
         include: { items: { orderBy: { createdAt: 'asc' } } },
       })
     })
@@ -76,6 +80,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (transaksi === 'LIMIT') {
       return NextResponse.json({ success: false, message: `Batas ${DAILY_TRANSACTION_LIMIT} transaksi per shift sudah tercapai.` }, { status: 409 })
+    }
+
+    if (transaksi === 'CONFLICT') {
+      return NextResponse.json({ success: false, message: 'Order ini baru saja dibayar oleh proses lain. Muat ulang halaman.' }, { status: 409 })
     }
 
     return NextResponse.json({ success: true, data: transaksi })

@@ -45,12 +45,14 @@ describe('Bayar order API', () => {
 
   it('finalizes open order before receipt is rendered', async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: 'trx1', total: 25000, items: [{ id: 'item1' }] })
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 })
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback({
       kasirShift: { findFirst: vi.fn().mockResolvedValue({ id: 'shift1', dibukaPada: new Date() }) },
       transaksi: {
         findFirst,
         count: vi.fn().mockResolvedValue(0),
-        update: vi.fn().mockResolvedValue({ id: 'trx1', status: 'SELESAI', metodePembayaran: 'CASH', total: 25000, items: [{ id: 'item1' }] }),
+        updateMany,
+        findUnique: vi.fn().mockResolvedValue({ id: 'trx1', status: 'SELESAI', metodePembayaran: 'CASH', total: 25000, items: [{ id: 'item1' }] }),
       },
     } as never))
 
@@ -67,6 +69,31 @@ describe('Bayar order API', () => {
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ id: 'trx1', warungId: 'warung1', shiftId: 'shift1', status: 'OPEN' }),
     }))
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'trx1', warungId: 'warung1', shiftId: 'shift1', status: 'OPEN' }),
+    }))
+  })
+
+  it('rejects when another process has already paid the order', async () => {
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback({
+      kasirShift: { findFirst: vi.fn().mockResolvedValue({ id: 'shift1', dibukaPada: new Date() }) },
+      transaksi: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'trx1', total: 25000, items: [{ id: 'item1' }] }),
+        count: vi.fn().mockResolvedValue(0),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    } as never))
+
+    const request = new NextRequest('http://localhost/api/transaksi/trx1/bayar', {
+      method: 'POST',
+      body: JSON.stringify({ metodePembayaran: 'CASH' }),
+    })
+
+    const response = await POST(request, { params: Promise.resolve({ id: 'trx1' }) })
+    const data = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(data.message).toContain('baru saja dibayar')
   })
 
   it('rejects invalid payment method', async () => {

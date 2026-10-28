@@ -114,12 +114,14 @@ model Transaksi {
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
   printedAt        DateTime?          @map("printed_at")
+  idempotencyKey   String?            @map("idempotency_key")
 
   warung  Warung          @relation(fields: [warungId], references: [id])
   kasir   User?           @relation(fields: [kasirId], references: [id])
   shift   KasirShift?     @relation(fields: [shiftId], references: [id])
   items   TransaksiItem[]
 
+  @@unique([warungId, idempotencyKey])
   @@index([warungId, nomorMeja, status])
   @@index([kasirId, createdAt])
   @@index([shiftId])
