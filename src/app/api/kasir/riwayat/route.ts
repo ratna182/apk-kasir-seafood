@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, requireRole } from '@/lib/auth'
 import { compareIndonesian } from '@/lib/menu-sort'
+import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 
 export async function GET(request: NextRequest) {
   try {
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
       where: { id: { in: uniqueMenuIds }, warungId },
       select: { id: true, category: { select: { nama: true } } },
     })
-    const kategoriMap = new Map(menuCategories.map((menu) => [menu.id, menu.category?.nama || 'Lainnya']))
+    const kategoriMap = new Map(menuCategories.map((menu) => [menu.id, normalizeKategoriNama(menu.category?.nama)]))
 
     const data = sessions.map((s) => {
       const sessionStart = s.tanggal
@@ -99,7 +100,7 @@ export async function GET(request: NextRequest) {
           } else {
             rekapMap.set(item.namaMenu, {
               namaMenu: item.namaMenu,
-              kategori: kategoriMap.get(item.menuId) || 'MAKANAN',
+              kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
               qtyTotal: item.qty,
               pendapatanTotal: item.subtotal,
             })

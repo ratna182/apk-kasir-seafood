@@ -9,6 +9,7 @@ import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeLaporan } from '@/lib/printer/laporan-encoder'
 import { formatBranchLine } from '@/lib/branch-config'
 import { formatWibDateTime } from '@/lib/time'
+import { isKategoriMinuman } from '@/lib/kategori'
 
 interface RekapItem {
   namaMenu: string
@@ -479,8 +480,8 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
                     <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)', transition: 'var(--transition)' }}>
                       <td style={{ padding: '0.9rem 1.25rem', fontWeight: 600 }}>{item.namaMenu}</td>
                       <td style={{ padding: '0.9rem 1rem' }}>
-                        <span className="badge" style={{ background: item.kategori === 'MAKANAN' ? 'var(--color-brand-light)' : 'var(--color-success-light)', color: item.kategori === 'MAKANAN' ? 'var(--color-brand)' : 'var(--color-success)', fontSize: '0.75rem' }}>
-                          {item.kategori === 'MAKANAN' ? 'Makanan' : 'Minuman'}
+                        <span className="badge" style={{ background: isKategoriMinuman(item.kategori) ? 'var(--color-success-light)' : 'var(--color-brand-light)', color: isKategoriMinuman(item.kategori) ? 'var(--color-success)' : 'var(--color-brand)', fontSize: '0.75rem' }}>
+                          {item.kategori}
                         </span>
                       </td>
                       <td style={{ padding: '0.9rem 1rem', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{item.qtyTotal}</td>

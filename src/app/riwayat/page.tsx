@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar'
 import RiwayatClient from './RiwayatClient'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 import { compareIndonesian } from '@/lib/menu-sort'
+import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 
 export const metadata = {
   title: `Riwayat Laporan Harian — ${DEFAULT_BRANCH_NAME}`,
@@ -94,7 +95,7 @@ export default async function RiwayatPage({
       where: { id: { in: uniqueMenuIds }, warungId: s.warungId },
       select: { id: true, category: { select: { nama: true } } },
     })
-    const kategoriMap = new Map(menuCategories.map(m => [m.id, m.category?.nama || 'Lainnya']))
+    const kategoriMap = new Map(menuCategories.map(m => [m.id, normalizeKategoriNama(m.category?.nama)]))
 
     const rekapMap = new Map<string, { namaMenu: string; kategori: string; qtyTotal: number; pendapatanTotal: number }>()
     let grandTotalQty = 0
@@ -118,7 +119,7 @@ export default async function RiwayatPage({
         } else {
           rekapMap.set(item.namaMenu, {
             namaMenu: item.namaMenu,
-            kategori: kategoriMap.get(item.menuId) || 'MAKANAN',
+            kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
             qtyTotal: item.qty,
             pendapatanTotal: item.subtotal,
           })

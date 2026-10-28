@@ -167,4 +167,77 @@ describe('Current cashier session report', () => {
       where: expect.objectContaining({ aktivitas: { in: ['LOGIN', 'BUKA_KASIR', 'TUTUP_KASIR'] } }),
     }))
   })
+
+  it('groups each menu under its own category and labels unknown menus as Tanpa kategori', async () => {
+    const today = getStoreDayRange().today
+    const now = new Date('2026-09-14T05:00:00.000Z')
+    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.menu.findMany).mockResolvedValue([
+      { id: 'menu-ikan', category: { nama: 'Ikan Bakar' } },
+      { id: 'menu-es', category: { nama: 'Minuman' } },
+    ] as never)
+    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([
+      {
+        id: 'trx-1',
+        warungId: 'warung1',
+        kasirId: 'kasir1',
+        nomorMeja: 'Meja 1',
+        status: 'SELESAI',
+        metodePembayaran: 'CASH',
+        total: 50000,
+        tanggal: today,
+        createdAt: now,
+        updatedAt: now,
+        printedAt: null,
+        items: [
+          {
+            id: 'item-1',
+            transaksiId: 'trx-1',
+            menuId: 'menu-ikan',
+            namaMenu: 'Ikan Bakar',
+            hargaSatuan: 45000,
+            diskonSatuan: 0,
+            catatan: null,
+            qty: 1,
+            subtotal: 45000,
+            createdAt: now,
+          },
+          {
+            id: 'item-2',
+            transaksiId: 'trx-1',
+            menuId: 'menu-es',
+            namaMenu: 'Es Teh Manis',
+            hargaSatuan: 5000,
+            diskonSatuan: 0,
+            catatan: null,
+            qty: 1,
+            subtotal: 5000,
+            createdAt: now,
+          },
+          {
+            id: 'item-3',
+            transaksiId: 'trx-1',
+            menuId: 'menu-terhapus',
+            namaMenu: 'Menu Lama',
+            hargaSatuan: 0,
+            diskonSatuan: 0,
+            catatan: null,
+            qty: 1,
+            subtotal: 0,
+            createdAt: now,
+          },
+        ],
+      },
+    ] as never)
+
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian'))
+    const result = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(result.data.rekap).toEqual([
+      { namaMenu: 'Ikan Bakar', kategori: 'Ikan Bakar', qtyTotal: 1, pendapatanTotal: 45000 },
+      { namaMenu: 'Es Teh Manis', kategori: 'Minuman', qtyTotal: 1, pendapatanTotal: 5000 },
+      { namaMenu: 'Menu Lama', kategori: 'Tanpa kategori', qtyTotal: 1, pendapatanTotal: 0 },
+    ])
+  })
 })

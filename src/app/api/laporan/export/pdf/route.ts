@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { compareIndonesian } from '@/lib/menu-sort'
+import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
 import { getKasirSessionState } from '@/lib/kasir-session'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
       where: { id: { in: menuIds }, warungId },
       select: { id: true, category: { select: { nama: true } } },
     })
-    const kategoriMap = new Map(menus.map((menu) => [menu.id, menu.category?.nama || 'Lainnya']))
+    const kategoriMap = new Map(menus.map((menu) => [menu.id, normalizeKategoriNama(menu.category?.nama)]))
 
     // Hitung rekap per menu
     const rekapMap = new Map<string, {
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
         } else {
           rekapMap.set(item.namaMenu, {
             namaMenu: item.namaMenu,
-            kategori: kategoriMap.get(item.menuId) || 'Lainnya',
+            kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
             qtyTotal: item.qty,
             pendapatanTotal: item.subtotal,
           })

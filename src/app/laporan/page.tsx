@@ -8,6 +8,7 @@ import AutoRefresh from '@/components/AutoRefresh'
 import LaporanClient from './LaporanClient'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 import { compareIndonesian } from '@/lib/menu-sort'
+import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 
 export const metadata = {
   title: `Laporan Harian & Tutup Kasir — ${DEFAULT_BRANCH_NAME}`,
@@ -66,7 +67,7 @@ export default async function LaporanPage() {
     where: { id: { in: uniqueMenuIds }, warungId: defaultWarung.id },
     select: { id: true, category: { select: { nama: true } } },
   })
-  const kategoriMap = new Map(menuCategories.map(m => [m.id, m.category?.nama || 'Lainnya']))
+  const kategoriMap = new Map(menuCategories.map(m => [m.id, normalizeKategoriNama(m.category?.nama)]))
 
   const rekapMap = new Map<string, { namaMenu: string; kategori: string; qtyTotal: number; pendapatanTotal: number }>()
   let grandTotalQty = 0
@@ -89,7 +90,7 @@ export default async function LaporanPage() {
       } else {
         rekapMap.set(item.namaMenu, {
           namaMenu: item.namaMenu,
-          kategori: kategoriMap.get(item.menuId) || 'MAKANAN',
+          kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
           qtyTotal: item.qty,
           pendapatanTotal: item.subtotal,
         })

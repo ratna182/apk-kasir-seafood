@@ -4,6 +4,7 @@ import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
 import { getKasirSessionState } from '@/lib/kasir-session'
 import { getStoreDateKey } from '@/lib/time'
 import { compareIndonesian } from '@/lib/menu-sort'
+import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 
 // GET /api/laporan/harian — rekap penjualan hari ini per menu
 // Query params: warung_id (required untuk owner, optional untuk kasir)
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
       where: { id: { in: uniqueMenuIds }, warungId },
       select: { id: true, category: { select: { nama: true } } },
     })
-    const kategoriMap = new Map(menuCategories.map(m => [m.id, m.category?.nama || 'Lainnya']))
+    const kategoriMap = new Map(menuCategories.map(m => [m.id, normalizeKategoriNama(m.category?.nama)]))
 
     const rekapMap = new Map<string, {
       namaMenu: string
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
         } else {
           rekapMap.set(item.namaMenu, {
             namaMenu: item.namaMenu,
-            kategori: kategoriMap.get(item.menuId) || 'MAKANAN',
+            kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
             qtyTotal: item.qty,
             pendapatanTotal: item.subtotal,
           })

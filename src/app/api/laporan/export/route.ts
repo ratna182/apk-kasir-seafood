@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
 import { getKasirSessionState } from '@/lib/kasir-session'
+import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 import ExcelJS from 'exceljs'
 
 // GET /api/laporan/export — export laporan ke Excel
@@ -60,6 +61,13 @@ export async function GET(request: NextRequest) {
       include: { items: true },
       orderBy: { tanggal: 'asc' },
     })
+
+    const menuIds = [...new Set(transaksis.flatMap((transaksi) => transaksi.items.map((item) => item.menuId)))]
+    const menus = await prisma.menu.findMany({
+      where: { id: { in: menuIds }, warungId },
+      select: { id: true, category: { select: { nama: true } } },
+    })
+    const kategoriMap = new Map(menus.map((menu) => [menu.id, normalizeKategoriNama(menu.category?.nama)]))
 
     // Buat workbook Excel
     const workbook = new ExcelJS.Workbook()
@@ -127,6 +135,7 @@ export async function GET(request: NextRequest) {
       { header: 'Tanggal', key: 'tanggal', width: 15 },
       { header: 'Meja', key: 'meja', width: 10 },
       { header: 'Menu', key: 'menu', width: 30 },
+      { header: 'Kategori', key: 'kategori', width: 20 },
       { header: 'Qty', key: 'qty', width: 8 },
       { header: 'Harga Satuan', key: 'harga', width: 15 },
       { header: 'Subtotal', key: 'subtotal', width: 15 },
@@ -150,6 +159,7 @@ export async function GET(request: NextRequest) {
           tanggal: transaksi.tanggal.toISOString().split('T')[0],
           meja: transaksi.nomorMeja,
           menu: item.namaMenu,
+          kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
           qty: item.qty,
           harga: item.hargaSatuan,
           subtotal: item.subtotal,
