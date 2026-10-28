@@ -84,14 +84,14 @@ export async function DELETE(
       return NextResponse.json({ success: false, message: 'User tidak ditemukan.' }, { status: 404 })
     }
 
-    // Cek apakah user sudah punya transaksi
-    const hasTransaksi = await prisma.kasirSesi.findFirst({
-      where: { ditutupOleh: id },
+    // Cek apakah user sudah punya riwayat shift
+    const hasShift = await prisma.kasirShift.findFirst({
+      where: { OR: [{ dibukaOleh: id }, { ditutupOleh: id }] },
     })
-    if (hasTransaksi) {
+    if (hasShift) {
       return NextResponse.json({
         success: false,
-        message: 'Tidak dapat menghapus user yang sudah pernah menutup kasir. Nonaktifkan saja.',
+        message: 'Tidak dapat menghapus user yang sudah pernah membuka atau menutup shift. Nonaktifkan saja.',
       }, { status: 409 })
     }
 

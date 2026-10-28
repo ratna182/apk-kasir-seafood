@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, getKasirWarungId, requireKasirAccess } from '@/lib/auth'
-import { getKasirSessionState } from '@/lib/kasir-session'
+import { getOpenShift } from '@/lib/kasir-shift'
+import { getStoreDayRange } from '@/lib/time'
 import { VALID_TABLE_NAMES } from '@/lib/table-layout'
 
 type IncomingItem = {
@@ -96,11 +97,11 @@ export async function POST(request: NextRequest) {
     const addedTotal = processedItems.reduce((sum, item) => sum + item.subtotal, 0)
 
     const transaksi = await prisma.$transaction(async (tx) => {
-      const state = await getKasirSessionState(tx, warungId, kasirId)
-      if (state.isClosed) return 'CLOSED' as const
+      const shift = await getOpenShift(tx, warungId)
+      if (!shift) return 'CLOSED' as const
 
       const existing = await tx.transaksi.findFirst({
-        where: { warungId, kasirId, nomorMeja, status: 'OPEN', createdAt: { gte: state.sessionStart } },
+        where: { warungId, nomorMeja, status: 'OPEN', shiftId: shift.id },
       })
 
       if (!existing) {
@@ -108,10 +109,11 @@ export async function POST(request: NextRequest) {
           data: {
             warungId,
             kasirId,
+            shiftId: shift.id,
             nomorMeja,
             status: 'OPEN',
             total: addedTotal,
-            tanggal: state.today,
+            tanggal: getStoreDayRange(shift.dibukaPada ?? new Date()).today,
             items: { create: processedItems },
           },
           include: { items: { orderBy: { createdAt: 'asc' } } },
@@ -132,7 +134,7 @@ export async function POST(request: NextRequest) {
     if (transaksi === 'CLOSED') {
       return NextResponse.json({
         success: false,
-        message: 'Kasir sudah ditutup. Buka sesi kasir baru untuk mulai bertransaksi.',
+        message: 'Buka kasir terlebih dahulu.',
       }, { status: 409 })
     }
 
@@ -164,18 +166,15 @@ export async function GET(request: NextRequest) {
     if (!warungId) {
       return NextResponse.json({ success: false, message: 'Kasir tidak terdaftar di warung.' }, { status: 403 })
     }
-    const kasirId = context!.user.id
-
-    const state = await getKasirSessionState(prisma, warungId, kasirId)
-    if (state.isClosed) {
+    const shift = await getOpenShift(prisma, warungId)
+    if (!shift) {
       return NextResponse.json({ success: true, data: [] })
     }
 
     const transaksis = await prisma.transaksi.findMany({
       where: {
         warungId,
-        kasirId,
-        createdAt: { gte: state.sessionStart, lt: state.tomorrow },
+        shiftId: shift.id,
         status: 'SELESAI',
       },
       include: { items: { orderBy: { createdAt: 'asc' } } },

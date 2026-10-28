@@ -6,10 +6,12 @@ import RiwayatClient from './RiwayatClient'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 import { compareIndonesian } from '@/lib/menu-sort'
 import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
+import { personName } from '@/lib/kasir-shift'
+import { getStoreDateKey, getStoreDayRangeForDateKey } from '@/lib/time'
 
 export const metadata = {
   title: `Riwayat Laporan Harian — ${DEFAULT_BRANCH_NAME}`,
-  description: 'Riwayat sesi kasir (buka/tutup) dan laporan keuangan harian.',
+  description: 'Riwayat shift kasir (buka/tutup) dan laporan keuangan harian.',
 }
 
 export const dynamic = 'force-dynamic'
@@ -24,79 +26,44 @@ export default async function RiwayatPage({
   if (!session) redirect('/login')
 
   const { mulai, sampai } = await searchParams
-  const startDate = /^\d{4}-\d{2}-\d{2}$/.test(mulai || '') ? new Date(`${mulai}T00:00:00.000Z`) : undefined
-  const endDate = /^\d{4}-\d{2}-\d{2}$/.test(sampai || '') ? new Date(`${sampai}T00:00:00.000Z`) : undefined
-  const tanggalFilter = startDate || endDate ? { ...(startDate ? { gte: startDate } : {}), ...(endDate ? { lte: endDate } : {}) } : undefined
+  const startRange = mulai && /^\d{4}-\d{2}-\d{2}$/.test(mulai) ? getStoreDayRangeForDateKey(mulai) : null
+  const endRange = sampai && /^\d{4}-\d{2}-\d{2}$/.test(sampai) ? getStoreDayRangeForDateKey(sampai) : null
+  const shiftDateFilter = startRange || endRange
+    ? {
+        ...(startRange ? { gte: startRange.today } : {}),
+        ...(endRange ? { lt: endRange.tomorrow } : {}),
+      }
+    : undefined
 
-  const kasirSesis = await prisma.kasirSesi.findMany({
+  const shifts = await prisma.kasirShift.findMany({
     where: {
       warungId: session.warungId ?? undefined,
-      ...(session.role === 'KASIR' ? { ditutupOleh: session.id } : {}),
-      ...(tanggalFilter ? { tanggal: tanggalFilter } : {}),
+      ...(session.role === 'KASIR' ? { OR: [{ dibukaOleh: session.id }, { ditutupOleh: session.id }] } : {}),
+      ...(shiftDateFilter ? { dibukaPada: shiftDateFilter } : {}),
     },
     include: {
-      user: { select: { namaLengkap: true, username: true } },
+      pembuka: { select: { namaLengkap: true, username: true } },
+      penutup: { select: { namaLengkap: true, username: true } },
       warung: { select: { nama: true, kode: true, alamat: true } },
+      transaksis: {
+        where: { status: 'SELESAI' },
+        include: { items: true },
+        orderBy: { createdAt: 'asc' },
+      },
     },
-    orderBy: [{ tanggal: 'desc' }, { ditutupPada: 'desc' }],
+    orderBy: [{ dibukaPada: 'desc' }, { createdAt: 'desc' }],
   })
 
-  const serializedSesis = await Promise.all(kasirSesis.map(async (s) => {
-    // Determine the effective time range for this session's transactions.
-    //
-    // Data model:
-    // - Buka-created sesi: ditutupPada = now() (default), totalTransaksi/totalPendapatan = 0
-    //   → represents the "kasir opened" event, not a real session with transactions
-    // - Tutup-created sesi: ditutupPada = actual close time, has real totals
-    //   → this is a real session; dibukaKembaliPada is set by the NEXT buka call
-    //
-    // For a tutup-created sesi S:
-    //   Start = the dibukaKembaliPada of the session BEFORE S
-    //          (which marks when THIS session was opened)
-    //   End   = S.ditutupPada (when THIS session was closed)
-
-    const isTutupSesi = s.totalTransaksi > 0 || s.totalPendapatan > 0
-
-    let effectiveStart: Date
-    let effectiveEnd: Date
-
-    if (isTutupSesi) {
-      // Find the immediately previous sesi for same warung+day
-      const previousSesi = await prisma.kasirSesi.findFirst({
-        where: {
-          warungId: s.warungId,
-          ditutupOleh: s.ditutupOleh,
-          tanggal: s.tanggal,
-          ditutupPada: { lt: s.ditutupPada },
-        },
-        orderBy: { ditutupPada: 'desc' },
+  const allMenuIds = [...new Set(shifts.flatMap((shift) => shift.transaksis.flatMap((tx) => tx.items.map((item) => item.menuId))))]
+  const menuCategories = allMenuIds.length > 0
+    ? await prisma.menu.findMany({
+        where: { id: { in: allMenuIds }, ...(session.warungId ? { warungId: session.warungId } : {}) },
+        select: { id: true, category: { select: { nama: true } } },
       })
-      // Start = when this session was opened (dibukaKembaliPada of previous sesi, or midnight for first session)
-      effectiveStart = s.dibukaPada ?? previousSesi?.dibukaPada ?? previousSesi?.dibukaKembaliPada ?? s.tanggal
-      // End = this session's ditutupPada (exact close time)
-      effectiveEnd = s.ditutupPada
-    } else {
-      // Buka-only sesi (no transactions yet) — show empty
-      effectiveStart = s.ditutupPada
-      effectiveEnd = s.ditutupPada
-    }
+    : []
+  const kategoriMap = new Map(menuCategories.map((menu) => [menu.id, normalizeKategoriNama(menu.category?.nama)]))
 
-    const transaksisSesi = await prisma.transaksi.findMany({
-      where: {
-        warungId: s.warungId,
-        createdAt: { gte: effectiveStart, lte: effectiveEnd },
-        status: 'SELESAI',
-      },
-      include: { items: true },
-    })
-
-    const uniqueMenuIds = [...new Set(transaksisSesi.flatMap(t => t.items.map(i => i.menuId)))]
-    const menuCategories = await prisma.menu.findMany({
-      where: { id: { in: uniqueMenuIds }, warungId: s.warungId },
-      select: { id: true, category: { select: { nama: true } } },
-    })
-    const kategoriMap = new Map(menuCategories.map(m => [m.id, normalizeKategoriNama(m.category?.nama)]))
-
+  const serializedSesis = shifts.map((shift) => {
     const rekapMap = new Map<string, { namaMenu: string; kategori: string; qtyTotal: number; pendapatanTotal: number }>()
     let grandTotalQty = 0
     let grandTotalPendapatan = 0
@@ -104,7 +71,7 @@ export default async function RiwayatPage({
     let totalQRIS = 0
     let totalTransfer = 0
 
-    for (const tx of transaksisSesi) {
+    for (const tx of shift.transaksis) {
       grandTotalPendapatan += tx.total
       if (tx.metodePembayaran === 'QRIS') totalQRIS += tx.total
       else if (tx.metodePembayaran === 'TRANSFER') totalTransfer += tx.total
@@ -133,20 +100,22 @@ export default async function RiwayatPage({
     })
 
     return {
-      id: s.id,
-      tanggal: s.tanggal.toISOString().split('T')[0],
-      ditutupPada: s.ditutupPada.toISOString(),
-      dibukaPada: s.dibukaPada?.toISOString() ?? null,
-      dibukaKembaliPada: s.dibukaKembaliPada?.toISOString() ?? null,
-      ditutupOleh: s.user.namaLengkap || s.user.username,
-      totalTransaksi: transaksisSesi.length > 0 ? transaksisSesi.length : s.totalTransaksi,
-      totalPendapatan: grandTotalPendapatan > 0 ? grandTotalPendapatan : s.totalPendapatan,
-      warungNama: s.warung.nama,
-      warungKode: s.warung.kode,
-      warungAlamat: s.warung.alamat,
+      id: shift.id,
+      tanggal: getStoreDateKey(shift.dibukaPada ?? shift.createdAt),
+      status: shift.status,
+      ditutupPada: shift.ditutupPada?.toISOString() ?? null,
+      dibukaPada: shift.dibukaPada?.toISOString() ?? null,
+      dibukaKembaliPada: null,
+      dibukaOleh: personName(shift.pembuka),
+      ditutupOleh: shift.penutup ? personName(shift.penutup) : null,
+      totalTransaksi: shift.transaksis.length,
+      totalPendapatan: grandTotalPendapatan,
+      warungNama: shift.warung.nama,
+      warungKode: shift.warung.kode,
+      warungAlamat: shift.warung.alamat,
       detail: {
         rekap,
-        transaksi: transaksisSesi.map(t => ({
+        transaksi: shift.transaksis.map((t) => ({
           nomorMeja: t.nomorMeja,
           total: t.total,
           metodePembayaran: t.metodePembayaran || 'CASH',
@@ -156,10 +125,10 @@ export default async function RiwayatPage({
         totalCash,
         totalQRIS,
         totalTransfer,
-        jumlahTransaksi: transaksisSesi.length,
+        jumlahTransaksi: shift.transaksis.length,
       },
     }
-  }))
+  })
 
   return (
     <div className="app-container">

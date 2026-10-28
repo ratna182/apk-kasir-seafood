@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { compareIndonesian } from '@/lib/menu-sort'
-import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
-import { getKasirSessionState } from '@/lib/kasir-session'
+import { buildLaporanHarian } from '@/lib/laporan-shift'
+import { getStoreDateKey, formatWibShortDateTime } from '@/lib/time'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 
-// GET /api/laporan/export/pdf — export laporan ke PDF
-// Query params: warung_id (required untuk owner)
+// GET /api/laporan/export/pdf — export laporan harian (per shift) ke PDF
+// Query params: warung_id (required untuk owner), tanggal (YYYY-MM-DD, default hari ini WIB)
 export async function GET(request: NextRequest) {
   try {
     const context = getAuthContext(request)
@@ -35,94 +34,25 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
     }
 
-    const kasirId = context.user.id
-    const state = await getKasirSessionState(prisma, warungId, kasirId)
-    if (!state.isClosed) {
-      return NextResponse.json({ success: false, message: 'Tutup kasir terlebih dahulu sebelum mencetak laporan.' }, { status: 409 })
-    }
+    const dateKey = searchParams.get('tanggal')?.trim() || getStoreDateKey()
+    const laporan = await buildLaporanHarian(prisma, warungId, dateKey)
 
-    const startDate = state.sessionStart
-    const endDate = state.sessionEnd
-
-    // Ambil info warung
-    const warung = await prisma.warung.findUnique({
-      where: { id: warungId },
-      select: { nama: true, kode: true },
-    })
-
-    // Export hanya untuk siklus kasir yang baru ditutup.
-    const transaksis = await prisma.transaksi.findMany({
-      where: {
-        warungId,
-        kasirId,
-        createdAt: { gte: state.sessionStart, lte: state.sessionEnd },
-        status: 'SELESAI',
-      },
-      include: { items: true },
-      orderBy: { tanggal: 'asc' },
-    })
-
-    const menuIds = [...new Set(transaksis.flatMap((transaksi) => transaksi.items.map((item) => item.menuId)))]
-    const menus = await prisma.menu.findMany({
-      where: { id: { in: menuIds }, warungId },
-      select: { id: true, category: { select: { nama: true } } },
-    })
-    const kategoriMap = new Map(menus.map((menu) => [menu.id, normalizeKategoriNama(menu.category?.nama)]))
-
-    // Hitung rekap per menu
-    const rekapMap = new Map<string, {
-      namaMenu: string
-      kategori: string
-      qtyTotal: number
-      pendapatanTotal: number
-    }>()
-
-    let grandTotalQty = 0
-    let grandTotalPendapatan = 0
-
-    for (const transaksi of transaksis) {
-      grandTotalPendapatan += transaksi.total
-      for (const item of transaksi.items) {
-        grandTotalQty += item.qty
-
-        const existing = rekapMap.get(item.namaMenu)
-        if (existing) {
-          existing.qtyTotal += item.qty
-          existing.pendapatanTotal += item.subtotal
-        } else {
-          rekapMap.set(item.namaMenu, {
-            namaMenu: item.namaMenu,
-            kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
-            qtyTotal: item.qty,
-            pendapatanTotal: item.subtotal,
-          })
-        }
-      }
-    }
-
-    const rekap = Array.from(rekapMap.values()).sort((a, b) => {
-      const categoryOrder = compareIndonesian(a.kategori, b.kategori)
-      return categoryOrder || compareIndonesian(a.namaMenu, b.namaMenu)
-    })
-
-    // Buat PDF
     const pdfDoc = await PDFDocument.create()
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica)
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
-    const page = pdfDoc.addPage([595.28, 841.89]) // A4 size
+    const page = pdfDoc.addPage([595.28, 841.89])
     const { width, height } = page.getSize()
 
-    // Header
-    page.drawText('LAPORAN PENJUALAN', {
-      x: width / 2 - 100,
+    page.drawText('LAPORAN PENJUALAN HARIAN', {
+      x: width / 2 - 110,
       y: height - 50,
       size: 18,
       font: helveticaBold,
       color: rgb(0, 0, 0),
     })
 
-    page.drawText(warung?.nama || 'Semua Warung', {
+    page.drawText(laporan.warung.nama || 'Semua Warung', {
       x: width / 2 - 120,
       y: height - 75,
       size: 12,
@@ -130,7 +60,7 @@ export async function GET(request: NextRequest) {
       color: rgb(0.2, 0.2, 0.2),
     })
 
-    page.drawText(`Periode: ${startDate.toISOString().split('T')[0]} s/d ${endDate.toISOString().split('T')[0]}`, {
+    page.drawText(`Tanggal laporan: ${dateKey} (WIB)`, {
       x: width / 2 - 100,
       y: height - 95,
       size: 10,
@@ -138,7 +68,6 @@ export async function GET(request: NextRequest) {
       color: rgb(0.4, 0.4, 0.4),
     })
 
-    // Garis pemisah
     page.drawLine({
       start: { x: 50, y: height - 110 },
       end: { x: width - 50, y: height - 110 },
@@ -146,13 +75,33 @@ export async function GET(request: NextRequest) {
       color: rgb(0.7, 0.7, 0.7),
     })
 
-    // Tabel Rekap
-    let y = height - 140
+    let y = height - 135
+    page.drawText('SHIFT', { x: 50, y, size: 11, font: helveticaBold })
+    y -= 16
+    for (const shift of laporan.shifts) {
+      if (y < 80) break
+      const buka = shift.dibukaPada ? formatWibShortDateTime(new Date(shift.dibukaPada)) : '-'
+      const tutup = shift.ditutupPada
+        ? formatWibShortDateTime(new Date(shift.ditutupPada))
+        : shift.status === 'TERBUKA' ? 'masih buka' : '-'
+      const line = `${shift.label}: Buka ${buka}, Tutup ${tutup} WIB — ${shift.dibukaOleh}${shift.ditutupOleh ? ` / ${shift.ditutupOleh}` : ''}`
+      page.drawText(line.substring(0, 100), { x: 50, y, size: 9, font: helveticaFont })
+      y -= 13
+      page.drawText(
+        `  ${shift.totalTransaksi} transaksi, Rp ${shift.totalPendapatan.toLocaleString('id-ID')}${shift.overtime ? ' (OVERTIME)' : ''}`,
+        { x: 50, y, size: 9, font: helveticaFont, color: rgb(0.35, 0.35, 0.35) },
+      )
+      y -= 14
+    }
+
+    y -= 8
+    page.drawText('REKAP MENU', { x: 50, y, size: 11, font: helveticaBold })
+    y -= 20
+
     const tableHeaders = ['Menu', 'Kategori', 'Qty', 'Pendapatan']
     const columnWidths = [200, 100, 80, 120]
     const startX = 50
 
-    // Header tabel
     page.drawText(tableHeaders[0], { x: startX, y, size: 10, font: helveticaBold })
     page.drawText(tableHeaders[1], { x: startX + columnWidths[0], y, size: 10, font: helveticaBold })
     page.drawText(tableHeaders[2], { x: startX + columnWidths[0] + columnWidths[1], y, size: 10, font: helveticaBold })
@@ -167,25 +116,28 @@ export async function GET(request: NextRequest) {
     })
     y -= 15
 
-    // Data tabel
-    for (const item of rekap) {
+    let currentPage = page
+    for (const item of laporan.rekap) {
       if (y < 100) {
-        // Halaman baru jika terlalu dekat dengan bawah
-        const newPage = pdfDoc.addPage([595.28, 841.89])
-        y = newPage.getSize().height - 50
+        currentPage = pdfDoc.addPage([595.28, 841.89])
+        y = currentPage.getSize().height - 50
       }
 
-      page.drawText(item.namaMenu.substring(0, 30), { x: startX, y, size: 9, font: helveticaFont })
-      page.drawText(item.kategori, { x: startX + columnWidths[0], y, size: 9, font: helveticaFont })
-      page.drawText(item.qtyTotal.toString(), { x: startX + columnWidths[0] + columnWidths[1], y, size: 9, font: helveticaFont })
-      page.drawText(`Rp ${item.pendapatanTotal.toLocaleString('id-ID')}`, { x: startX + columnWidths[0] + columnWidths[1] + columnWidths[2], y, size: 9, font: helveticaFont })
+      currentPage.drawText(item.namaMenu.substring(0, 30), { x: startX, y, size: 9, font: helveticaFont })
+      currentPage.drawText(item.kategori.substring(0, 20), { x: startX + columnWidths[0], y, size: 9, font: helveticaFont })
+      currentPage.drawText(item.qtyTotal.toString(), { x: startX + columnWidths[0] + columnWidths[1], y, size: 9, font: helveticaFont })
+      currentPage.drawText(`Rp ${item.pendapatanTotal.toLocaleString('id-ID')}`, { x: startX + columnWidths[0] + columnWidths[1] + columnWidths[2], y, size: 9, font: helveticaFont })
 
       y -= 18
     }
 
-    // Garis pemisah
+    if (y < 100) {
+      currentPage = pdfDoc.addPage([595.28, 841.89])
+      y = currentPage.getSize().height - 60
+    }
+
     y -= 5
-    page.drawLine({
+    currentPage.drawLine({
       start: { x: startX, y },
       end: { x: startX + columnWidths.reduce((a, b) => a + b, 0), y },
       thickness: 0.5,
@@ -193,23 +145,18 @@ export async function GET(request: NextRequest) {
     })
     y -= 15
 
-    // Total
-    page.drawText('TOTAL', { x: startX, y, size: 10, font: helveticaBold })
-    page.drawText(grandTotalQty.toString(), { x: startX + columnWidths[0] + columnWidths[1], y, size: 10, font: helveticaBold })
-    page.drawText(`Rp ${grandTotalPendapatan.toLocaleString('id-ID')}`, { x: startX + columnWidths[0] + columnWidths[1] + columnWidths[2], y, size: 10, font: helveticaBold })
+    currentPage.drawText('TOTAL', { x: startX, y, size: 10, font: helveticaBold })
+    currentPage.drawText(laporan.grandTotalQty.toString(), { x: startX + columnWidths[0] + columnWidths[1], y, size: 10, font: helveticaBold })
+    currentPage.drawText(`Rp ${laporan.grandTotalPendapatan.toLocaleString('id-ID')}`, { x: startX + columnWidths[0] + columnWidths[1] + columnWidths[2], y, size: 10, font: helveticaBold })
 
-    // Footer
     y -= 30
-    page.drawText(`Jumlah Transaksi: ${transaksis.length}`, { x: startX, y, size: 9, font: helveticaFont })
+    currentPage.drawText(`Jumlah Transaksi: ${laporan.jumlahTransaksi}`, { x: startX, y, size: 9, font: helveticaFont })
     y -= 15
-    page.drawText(`Dicetak: ${new Date().toLocaleString('id-ID')}`, { x: startX, y, size: 9, font: helveticaFont })
+    currentPage.drawText(`Dicetak: ${new Date().toLocaleString('id-ID')}`, { x: startX, y, size: 9, font: helveticaFont })
 
-    // Generate buffer
     const pdfBytes = await pdfDoc.save()
+    const filename = `laporan-${laporan.warung.kode || 'all'}-${dateKey}.pdf`
 
-    // Return file
-    const filename = `laporan-${warung?.kode || 'all'}-${startDate.toISOString().split('T')[0]}-${endDate.toISOString().split('T')[0]}.pdf`
-    
     return new NextResponse(Buffer.from(pdfBytes), {
       headers: {
         'Content-Type': 'application/pdf',
@@ -218,6 +165,9 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[GET /api/laporan/export/pdf]', error)
+    if (error instanceof Error && error.message.startsWith('Format tanggal')) {
+      return NextResponse.json({ success: false, message: error.message }, { status: 422 })
+    }
     return NextResponse.json({ success: false, message: 'Gagal export laporan PDF.' }, { status: 500 })
   }
 }

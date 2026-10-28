@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    kasirSesi: { findFirst: vi.fn() },
+    kasirShift: { findFirst: vi.fn() },
     menu: { findMany: vi.fn() },
     transaksi: { findMany: vi.fn() },
     $transaction: vi.fn(),
@@ -58,7 +58,7 @@ describe('Transaksi held order API', () => {
     vi.mocked(requireRole).mockReturnValue(null)
     vi.mocked(requireKasirAccess).mockResolvedValue(null)
     vi.mocked(getKasirWarungId).mockResolvedValue('warung1')
-    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.kasirShift.findFirst).mockResolvedValue(null)
   })
 
   it('rejects empty table number', async () => {
@@ -78,7 +78,7 @@ describe('Transaksi held order API', () => {
     vi.mocked(prisma.menu.findMany).mockResolvedValue([menu])
     const create = vi.fn().mockResolvedValue({ id: 'trx1', nomorMeja: 'Meja 1', status: 'OPEN', total: 25000, items: [] })
     vi.mocked(prisma.$transaction).mockImplementation(async (callback) => callback({
-      kasirSesi: { findFirst: vi.fn().mockResolvedValue(null) },
+      kasirShift: { findFirst: vi.fn().mockResolvedValue({ id: 'shift1', dibukaPada: new Date() }) },
       transaksi: {
         findFirst: vi.fn().mockResolvedValue(null),
         create,
@@ -98,31 +98,19 @@ describe('Transaksi held order API', () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kasirId: 'kasir1' }) }))
   })
 
-  it('keeps finished transaction list limited to paid orders', async () => {
-    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([])
-
-    const response = await GET(new NextRequest('http://localhost/api/transaksi'))
-    const data = await response.json()
-
-    expect(response.status).toBe(200)
-    expect(data.data).toEqual([])
-    expect(prisma.transaksi.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ kasirId: 'kasir1', status: 'SELESAI', createdAt: expect.any(Object) }),
-    }))
-  })
-
-  it('starts reopened session without prior transactions', async () => {
-    const reopenedAt = new Date('2026-09-14T05:00:00.000Z')
-    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue({
-      id: 'session1',
+  it('lists completed transactions for the current open shift', async () => {
+    vi.mocked(prisma.kasirShift.findFirst).mockResolvedValue({
+      id: 'shift1',
       warungId: 'warung1',
-      tanggal: new Date('2026-09-14'),
-      ditutupOleh: 'kasir1',
-      dibukaPada: null,
-      ditutupPada: new Date('2026-09-14T04:00:00.000Z'),
-      dibukaKembaliPada: reopenedAt,
-      totalTransaksi: 2,
-      totalPendapatan: 50000,
+      status: 'TERBUKA',
+      dibukaPada: new Date('2026-09-14T05:00:00.000Z'),
+      ditutupPada: null,
+      dibukaOleh: 'kasir1',
+      ditutupOleh: null,
+      catatanBuka: null,
+      catatanTutup: null,
+      createdAt: new Date('2026-09-14T05:00:00.000Z'),
+      updatedAt: new Date('2026-09-14T05:00:00.000Z'),
     })
     vi.mocked(prisma.transaksi.findMany).mockResolvedValue([])
 
@@ -130,22 +118,12 @@ describe('Transaksi held order API', () => {
 
     expect(response.status).toBe(200)
     expect(prisma.transaksi.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ createdAt: expect.objectContaining({ gte: reopenedAt }) }),
+      where: expect.objectContaining({ warungId: 'warung1', shiftId: 'shift1', status: 'SELESAI' }),
     }))
   })
 
   it('returns no transactions while cashier is closed', async () => {
-    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue({
-      id: 'session1',
-      warungId: 'warung1',
-      tanggal: new Date('2026-09-14'),
-      ditutupOleh: 'kasir1',
-      dibukaPada: null,
-      ditutupPada: new Date(),
-      dibukaKembaliPada: null,
-      totalTransaksi: 2,
-      totalPendapatan: 50000,
-    })
+    vi.mocked(prisma.kasirShift.findFirst).mockResolvedValue(null)
 
     const response = await GET(new NextRequest('http://localhost/api/transaksi'))
     const data = await response.json()

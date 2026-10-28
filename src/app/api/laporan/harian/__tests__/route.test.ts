@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    kasirSesi: { findFirst: vi.fn() },
+    kasirShift: { findMany: vi.fn() },
     transaksi: { findMany: vi.fn() },
     activityLog: { findMany: vi.fn() },
     warung: { findUnique: vi.fn() },
@@ -22,9 +22,50 @@ vi.mock('@/lib/auth', () => ({
 
 import { GET } from '../route'
 import { prisma } from '@/lib/prisma'
-import { getStoreDayRange } from '@/lib/time'
+import { getStoreDayRangeForDateKey } from '@/lib/time'
 
-describe('Current cashier session report', () => {
+const now = new Date('2026-09-14T04:00:00.000Z')
+
+function makeShift(id: string, openedAt: Date, closedAt: Date | null, transaksis: unknown[] = []) {
+  return {
+    id,
+    warungId: 'warung1',
+    status: closedAt ? 'DITUTUP' : 'TERBUKA',
+    dibukaPada: openedAt,
+    ditutupPada: closedAt,
+    dibukaOleh: 'kasir1',
+    ditutupOleh: closedAt ? 'kasir1' : null,
+    catatanBuka: null,
+    catatanTutup: null,
+    pembuka: { namaLengkap: 'Kasir Satu', username: 'kasir1' },
+    penutup: closedAt ? { namaLengkap: 'Kasir Satu', username: 'kasir1' } : null,
+    transaksis,
+  }
+}
+
+function makeTransaction(id: string, total: number, method: 'CASH' | 'QRIS' | 'TRANSFER' = 'CASH') {
+  return {
+    id,
+    nomorMeja: 'Meja 1',
+    total,
+    metodePembayaran: method,
+    createdAt: now,
+    items: [{
+      id: `item-${id}`,
+      transaksiId: id,
+      menuId: 'menu1',
+      namaMenu: 'Ikan Bakar',
+      hargaSatuan: total,
+      diskonSatuan: 0,
+      catatan: null,
+      qty: 1,
+      subtotal: total,
+      createdAt: now,
+    }],
+  }
+}
+
+describe('Daily shift report', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(prisma.warung.findUnique).mockResolvedValue({
@@ -36,82 +77,85 @@ describe('Current cashier session report', () => {
     })
     vi.mocked(prisma.menu.findMany).mockResolvedValue([])
     vi.mocked(prisma.activityLog.findMany).mockResolvedValue([])
+    vi.mocked(prisma.kasirShift.findMany).mockResolvedValue([])
+    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([])
   })
 
-  it('includes all transactions for the day even after cashier reopens', async () => {
-    const reopenedAt = new Date('2026-09-14T05:00:00.000Z')
-    const today = getStoreDayRange().today
-    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue({
-      id: 'session1',
-      warungId: 'warung1',
-      tanggal: today,
-      ditutupOleh: 'kasir1',
-      dibukaPada: null,
-      ditutupPada: new Date('2026-09-14T04:00:00.000Z'),
-      dibukaKembaliPada: reopenedAt,
-      totalTransaksi: 2,
-      totalPendapatan: 375000,
-    })
-    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([])
+  it('groups transactions by shifts opened on the requested WIB date', async () => {
+    const openedAt = new Date('2026-09-14T01:00:00.000Z')
+    vi.mocked(prisma.kasirShift.findMany).mockResolvedValue([
+      makeShift('shift1', openedAt, new Date('2026-09-14T10:00:00.000Z'), [makeTransaction('trx1', 25000, 'QRIS')]),
+    ] as never)
 
-    const response = await GET(new NextRequest('http://localhost/api/laporan/harian'))
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian?tanggal=2026-09-14'))
+    const result = await response.json()
+    const day = getStoreDayRangeForDateKey('2026-09-14')
+
+    expect(response.status).toBe(200)
+    expect(prisma.kasirShift.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ warungId: 'warung1', dibukaPada: { gte: day.today, lt: day.tomorrow } }),
+    }))
+    expect(result.data.shifts).toHaveLength(1)
+    expect(result.data.shifts[0]).toEqual(expect.objectContaining({
+      id: 'shift1',
+      label: 'Shift 1',
+      totalTransaksi: 1,
+      totalPendapatan: 25000,
+      totalQRIS: 25000,
+    }))
+    expect(result.data.jumlahTransaksi).toBe(1)
+    expect(result.data.grandTotalPendapatan).toBe(25000)
+  })
+
+  it('keeps transactions after midnight inside the shift that opened the previous day', async () => {
+    const openedAt = new Date('2026-09-13T17:30:00.000Z')
+    const afterMidnight = new Date('2026-09-13T18:30:00.000Z')
+    vi.mocked(prisma.kasirShift.findMany).mockResolvedValue([
+      makeShift('shift1', openedAt, new Date('2026-09-14T02:00:00.000Z'), [{
+        ...makeTransaction('trx1', 50000),
+        createdAt: afterMidnight,
+      }]),
+    ] as never)
+
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian?tanggal=2026-09-14'))
     const result = await response.json()
 
-    expect(response.status).toBe(200)
-    expect(result.data).toEqual(expect.objectContaining({
-      jumlahTransaksi: 0,
-      grandTotalQty: 0,
-      grandTotalPendapatan: 0,
-      totalCash: 0,
-      totalQRIS: 0,
-      totalTransfer: 0,
-      rekap: [],
-    }))
-    expect(prisma.transaksi.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ createdAt: expect.objectContaining({ gte: today }) }),
-    }))
+    expect(result.data.tanggal).toBe('2026-09-14')
+    expect(result.data.shifts[0].totalTransaksi).toBe(1)
+    expect(result.data.transaksi[0].createdAt).toBe(afterMidnight.toISOString())
   })
 
-  it('reports all transactions for the day across repeated open and close cycles', async () => {
-    const today = getStoreDayRange().today
-    const reopenedAt = new Date('2026-09-14T11:00:00.000Z')
-    const closedAt = new Date('2026-09-14T15:00:00.000Z')
-    vi.mocked(prisma.kasirSesi.findFirst)
-      .mockResolvedValueOnce({
-        id: 'session3',
-        warungId: 'warung1',
-        tanggal: today,
-        ditutupOleh: 'kasir2',
-        dibukaPada: null,
-        ditutupPada: closedAt,
-        dibukaKembaliPada: null,
-        totalTransaksi: 1,
-        totalPendapatan: 25000,
-      })
-      .mockResolvedValueOnce({
-        id: 'session2',
-        warungId: 'warung1',
-        tanggal: today,
-        ditutupOleh: 'kasir1',
-        dibukaPada: null,
-        ditutupPada: new Date('2026-09-14T10:00:00.000Z'),
-        dibukaKembaliPada: reopenedAt,
-        totalTransaksi: 2,
-        totalPendapatan: 50000,
-      })
-    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([])
+  it('combines multiple shifts opened on the same date', async () => {
+    vi.mocked(prisma.kasirShift.findMany).mockResolvedValue([
+      makeShift('shift1', new Date('2026-09-14T01:00:00.000Z'), new Date('2026-09-14T04:00:00.000Z'), [makeTransaction('trx1', 25000)]),
+      makeShift('shift2', new Date('2026-09-14T05:00:00.000Z'), new Date('2026-09-14T10:00:00.000Z'), [makeTransaction('trx2', 50000, 'TRANSFER')]),
+    ] as never)
 
-    const response = await GET(new NextRequest('http://localhost/api/laporan/harian'))
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian?tanggal=2026-09-14'))
+    const result = await response.json()
 
-    expect(response.status).toBe(200)
+    expect(result.data.shifts).toHaveLength(2)
+    expect(result.data.jumlahTransaksi).toBe(2)
+    expect(result.data.grandTotalPendapatan).toBe(75000)
+    expect(result.data.totalCash).toBe(25000)
+    expect(result.data.totalTransfer).toBe(50000)
+  })
+
+  it('includes legacy transactions without a shift', async () => {
+    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([makeTransaction('legacy1', 30000)] as never)
+
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian?tanggal=2026-09-14'))
+    const result = await response.json()
+
     expect(prisma.transaksi.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ createdAt: { gte: today, lt: getStoreDayRange().tomorrow } }),
+      where: expect.objectContaining({ shiftId: null, status: 'SELESAI' }),
     }))
+    expect(result.data.shifts).toHaveLength(1)
+    expect(result.data.shifts[0].label).toBe('Tanpa shift (data lama)')
+    expect(result.data.grandTotalPendapatan).toBe(30000)
   })
 
   it('includes all cashier open and close activities', async () => {
-    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([])
     vi.mocked(prisma.activityLog.findMany).mockResolvedValue([
       {
         id: 'log-1',
@@ -133,7 +177,7 @@ describe('Current cashier session report', () => {
       },
     ] as never)
 
-    const response = await GET(new NextRequest('http://localhost/api/laporan/harian'))
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian?tanggal=2026-09-14'))
     const result = await response.json()
 
     expect(result.data.aktivitasKasir).toEqual([
@@ -143,8 +187,6 @@ describe('Current cashier session report', () => {
   })
 
   it('includes cashier login activities', async () => {
-    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue(null)
-    vi.mocked(prisma.transaksi.findMany).mockResolvedValue([])
     vi.mocked(prisma.activityLog.findMany).mockResolvedValue([
       {
         id: 'log-login',
@@ -157,7 +199,7 @@ describe('Current cashier session report', () => {
       },
     ] as never)
 
-    const response = await GET(new NextRequest('http://localhost/api/laporan/harian'))
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian?tanggal=2026-09-14'))
     const result = await response.json()
 
     expect(result.data.aktivitasKasir).toEqual([
@@ -169,9 +211,6 @@ describe('Current cashier session report', () => {
   })
 
   it('groups each menu under its own category and labels unknown menus as Tanpa kategori', async () => {
-    const today = getStoreDayRange().today
-    const now = new Date('2026-09-14T05:00:00.000Z')
-    vi.mocked(prisma.kasirSesi.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.menu.findMany).mockResolvedValue([
       { id: 'menu-ikan', category: { nama: 'Ikan Bakar' } },
       { id: 'menu-es', category: { nama: 'Minuman' } },
@@ -185,7 +224,7 @@ describe('Current cashier session report', () => {
         status: 'SELESAI',
         metodePembayaran: 'CASH',
         total: 50000,
-        tanggal: today,
+        tanggal: now,
         createdAt: now,
         updatedAt: now,
         printedAt: null,
@@ -230,7 +269,7 @@ describe('Current cashier session report', () => {
       },
     ] as never)
 
-    const response = await GET(new NextRequest('http://localhost/api/laporan/harian'))
+    const response = await GET(new NextRequest('http://localhost/api/laporan/harian?tanggal=2026-09-14'))
     const result = await response.json()
 
     expect(response.status).toBe(200)

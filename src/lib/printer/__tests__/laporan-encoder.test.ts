@@ -12,6 +12,19 @@ const CUT_TAIL = [0x1B, 0x33, 20, 0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]
 const DATA: LaporanData = {
   tanggal: '2026-09-16',
   warung: { id: 'w1', nama: 'Seafood & Nasi Uduk Vian Jaya 08 - Cabang 2', kode: '08', alamat: 'Jl. Pesisir No. 1' },
+  shifts: [{
+    id: 's1',
+    nomor: 1,
+    label: 'Shift 1',
+    status: 'DITUTUP',
+    dibukaPada: '2026-09-16T01:00:00.000Z',
+    ditutupPada: '2026-09-16T22:14:00.000Z',
+    dibukaOleh: 'Kasir',
+    ditutupOleh: 'Kasir',
+    totalTransaksi: 1,
+    totalPendapatan: 260000,
+    overtime: false,
+  }],
   rekap: [
     { namaMenu: 'Ikan Baronang Goreng Kering', kategori: 'Ikan', qtyTotal: 1, pendapatanTotal: 65000 },
     { namaMenu: 'Ikan Gurame Bakar', kategori: 'Ikan', qtyTotal: 1, pendapatanTotal: 60000 },
@@ -79,7 +92,7 @@ describe('encodeLaporan', () => {
 
   it('follows the section order of the reference receipt', async () => {
     const lines = receiptLines(
-      await encodeLaporan(DATA, 'Kasir Vian Jaya 08', null, '80mm', { ditutupPada: '2026-09-16T22:14:00.000Z', ditutupOleh: 'Kasir' }),
+      await encodeLaporan(DATA, 'Kasir Vian Jaya 08', null, '80mm'),
     )
 
     const order = [
@@ -87,9 +100,9 @@ describe('encodeLaporan', () => {
       'LAPORAN PENJUALAN HARIAN',
       'Tanggal: 2026-09-16',
       'Cabang : Seafood & Nasi Uduk Vian Jaya 08 -',
-      'Status: SUDAH DITUTUP',
+      'Shift 1',
       'DAFTAR TRANSAKSI',
-      'DETAIL KASIR',
+      'DETAIL SHIFT',
       'REKAP MENU',
       'TOTAL PER METODE BAYAR',
       '*** REKAPITULASI RESMI ***',
@@ -103,18 +116,12 @@ describe('encodeLaporan', () => {
   })
 
   it('keeps every line inside 48 columns on 80 mm paper', async () => {
-    const output = await encodeLaporan(DATA, 'Kasir Vian Jaya 08', null, '80mm', {
-      ditutupPada: '2026-09-16T22:14:00.000Z',
-      ditutupOleh: 'Kasir',
-    })
+    const output = await encodeLaporan(DATA, 'Kasir Vian Jaya 08', null, '80mm')
     expect(widestLine(output)).toBeLessThanOrEqual(48)
   })
 
   it('keeps every line inside 32 columns on 58 mm paper', async () => {
-    const output = await encodeLaporan(DATA, 'Kasir Vian Jaya 08', null, '58mm', {
-      ditutupPada: '2026-09-16T22:14:00.000Z',
-      ditutupOleh: 'Kasir',
-    })
+    const output = await encodeLaporan(DATA, 'Kasir Vian Jaya 08', null, '58mm')
     expect(widestLine(output)).toBeLessThanOrEqual(32)
   })
 
@@ -159,13 +166,10 @@ describe('encodeLaporan', () => {
 
   it('shows Buka and Tutup Kasir times on the right side', async () => {
     const lines = receiptLines(
-      await encodeLaporan(DATA, 'Kasir', null, '80mm', {
-        ditutupPada: '2026-09-16T22:14:00.000Z',
-        ditutupOleh: 'Kasir',
-      }),
+      await encodeLaporan(DATA, 'Kasir', null, '80mm'),
     )
-    const buka = lines.find((line) => line.includes('Buka Kasir'))
-    const tutup = lines.find((line) => line.includes('Tutup Kasir'))
+    const buka = lines.find((line) => line.includes('Shift 1 buka'))
+    const tutup = lines.find((line) => line.includes('Shift 1 tutup'))
 
     expect(buka).toBeDefined()
     expect(tutup).toBeDefined()
@@ -206,9 +210,14 @@ describe('encodeLaporan', () => {
     expect(widestLine(output)).toBeLessThanOrEqual(48)
   })
 
-  it('omits the session block when the shift is still open', async () => {
-    const lines = receiptLines(await encodeLaporan(DATA, 'Kasir', null, '80mm', null))
-    expect(lines.some((line) => line.includes('Status:'))).toBe(false)
+  it('marks a shift that is still open without a close time', async () => {
+    const openData = {
+      ...DATA,
+      shifts: [{ ...DATA.shifts[0], status: 'TERBUKA' as const, ditutupPada: null, ditutupOleh: null }],
+    }
+    const lines = receiptLines(await encodeLaporan(openData, 'Kasir', null, '80mm'))
+    expect(lines.some((line) => line.includes('Shift 1 (MASIH BUKA)'))).toBe(true)
+    expect(lines.some((line) => line.includes('Shift 1 tutup'))).toBe(true)
     expect(lines.some((line) => line.includes('DAFTAR TRANSAKSI'))).toBe(true)
   })
 })

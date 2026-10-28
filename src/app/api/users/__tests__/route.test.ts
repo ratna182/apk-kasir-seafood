@@ -11,7 +11,7 @@ vi.mock('@/lib/prisma', () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
-    kasirSesi: {
+    kasirShift: {
       findFirst: vi.fn(),
     },
   },

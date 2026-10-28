@@ -67,11 +67,12 @@ interface TransaksiClientProps {
   menus: Menu[]
   initialActiveOrders: ActiveOrder[]
   isKasirClosed: boolean
+  isShiftOvertime?: boolean
 }
 
 const TABLE_SECTION_GAP = '__table-section-gap__'
 
-export default function TransaksiClient({ session, menus: initialMenus, initialActiveOrders, isKasirClosed }: TransaksiClientProps) {
+export default function TransaksiClient({ session, menus: initialMenus, initialActiveOrders, isKasirClosed, isShiftOvertime }: TransaksiClientProps) {
   const isKranggan = session.username.toLowerCase().includes('kranggan') || session.warungNama?.toLowerCase().includes('kranggan')
   const hasLesehan = session.username === 'kasir1' || isKranggan
   const quickTables = hasLesehan ? [...LESEHAN, TABLE_SECTION_GAP, ...QUICK_TABLES] : QUICK_TABLES
@@ -243,7 +244,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   async function handleCheckout() {
     setError('')
     setSuccess('')
-    if (isKasirClosed) { setError('Kasir sudah ditutup. Tidak dapat membuat transaksi baru hari ini.'); return }
+    if (isKasirClosed) { setError('Buka kasir terlebih dahulu.'); return }
     if (!nomorMeja.trim()) { setError('Harap masukkan nomor meja atau pilih dari tombol meja.'); return }
     if (cart.length === 0) { setError('Keranjang pesanan masih kosong. Pilih menu di sebelah kiri.'); return }
 
@@ -388,13 +389,24 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       {isKasirClosed && (
         <div className="alert alert-warning no-print" style={{ marginBottom: '1.25rem' }}>
           <div>
-            <strong>Kasir Sudah Ditutup</strong>
+            <strong>Kasir Belum Dibuka</strong>
             <p style={{ margin: 0, fontSize: '0.85rem' }}>
-              Shift kasir hari ini telah ditutup. Pembuatan transaksi baru dinonaktifkan.
-              Anda dapat melihat laporan di menu{' '}
-              <Link href="/laporan" style={{ textDecoration: 'underline', color: 'inherit', fontWeight: 600 }}>
-                Laporan Harian
+              Buka kasir terlebih dahulu sebelum membuat transaksi.
+              Anda dapat membukanya di menu{' '}
+              <Link href="/kasir" style={{ textDecoration: 'underline', color: 'inherit', fontWeight: 600 }}>
+                Manajemen Kasir
               </Link>.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isKasirClosed && isShiftOvertime && (
+        <div className="alert alert-error no-print" style={{ marginBottom: '1.25rem' }}>
+          <div>
+            <strong>Peringatan: shift sudah berjalan lebih dari 18 jam</strong>
+            <p style={{ margin: 0, fontSize: '0.85rem' }}>
+              Segera tutup shift setelah pesanan selesai. Owner dapat menutup paksa shift dengan catatan.
             </p>
           </div>
         </div>

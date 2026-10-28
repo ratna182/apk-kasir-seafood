@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, getKasirWarungId, requireKasirAccess } from '@/lib/auth'
-import { getKasirSessionState } from '@/lib/kasir-session'
+import { getOpenShift } from '@/lib/kasir-shift'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,20 +13,18 @@ export async function GET(request: NextRequest) {
     if (!warungId) {
       return NextResponse.json({ success: false, message: 'Kasir tidak terdaftar di warung.' }, { status: 403 })
     }
-    const kasirId = context!.user.id
 
     const nomorMeja = request.nextUrl.searchParams.get('nomorMeja')?.trim()
-    const state = await getKasirSessionState(prisma, warungId, kasirId)
-    if (state.isClosed) {
+    const shift = await getOpenShift(prisma, warungId)
+    if (!shift) {
       return NextResponse.json({ success: true, data: nomorMeja ? null : [] })
     }
 
     const transaksis = await prisma.transaksi.findMany({
       where: {
         warungId,
-        kasirId,
+        shiftId: shift.id,
         status: 'OPEN',
-        createdAt: { gte: state.sessionStart },
         ...(nomorMeja ? { nomorMeja } : {}),
       },
       select: {

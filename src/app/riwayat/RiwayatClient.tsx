@@ -27,10 +27,12 @@ interface TransaksiItem {
 interface KasirSesi {
   id: string
   tanggal: string
-  ditutupPada: string
+  status: 'TERBUKA' | 'DITUTUP'
+  ditutupPada: string | null
   dibukaPada: string | null
   dibukaKembaliPada: string | null
-  ditutupOleh: string
+  dibukaOleh: string
+  ditutupOleh: string | null
   totalTransaksi: number
   totalPendapatan: number
   warungNama: string
@@ -71,7 +73,7 @@ export default function RiwayatClient({ session, initialKasirSesis, initialStart
   const filtered = kasirSesis.filter((s) => {
     if (!search) return true
     const q = search.toLowerCase()
-    return s.warungKode.toLowerCase().includes(q) || s.ditutupOleh.toLowerCase().includes(q) || s.tanggal.includes(q)
+    return s.warungKode.toLowerCase().includes(q) || (s.ditutupOleh ?? '').toLowerCase().includes(q) || s.tanggal.includes(q)
   })
 
   return (
@@ -158,12 +160,25 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
   const tanggal = new Date(sesi.tanggal + 'T00:00:00')
   const tanggalStr = tanggal.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const bukaStr = formatWibDateTime(sesi.dibukaPada ?? sesi.dibukaKembaliPada)
-  const tutupStr = formatWibDateTime(sesi.ditutupPada)
+  const tutupStr = sesi.ditutupPada ? formatWibDateTime(sesi.ditutupPada) : '-'
 
   function buildLaporanData(): LaporanData {
     return {
       tanggal: sesi.tanggal,
       warung: { id: '', nama: sesi.warungNama, kode: sesi.warungKode, alamat: sesi.warungAlamat },
+      shifts: [{
+        id: sesi.id,
+        nomor: 1,
+        label: 'Shift',
+        status: sesi.status,
+        dibukaPada: sesi.dibukaPada,
+        ditutupPada: sesi.ditutupPada,
+        dibukaOleh: sesi.dibukaOleh,
+        ditutupOleh: sesi.ditutupOleh,
+        totalTransaksi: d.jumlahTransaksi,
+        totalPendapatan: sesi.totalPendapatan,
+        overtime: false,
+      }],
       rekap: d.rekap,
       transaksi: d.transaksi,
       grandTotalQty: d.grandTotalQty,
@@ -192,7 +207,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
     setPrinting(true)
     try {
       const data = buildLaporanData()
-      const encoded = await encodeLaporan(data, sesi.ditutupOleh, sesi.warungAlamat, printerWidth, { ditutupPada: sesi.ditutupPada, ditutupOleh: sesi.ditutupOleh })
+      const encoded = await encodeLaporan(data, sesi.ditutupOleh ?? sesi.dibukaOleh, sesi.warungAlamat, printerWidth)
       const success = await handlePrintWithRetry(encoded)
       if (success) {
         alert('Laporan berhasil dicetak.')
@@ -239,7 +254,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
           <div style={{ borderTop: '1px dashed var(--color-border)', borderBottom: '1px dashed var(--color-border)', padding: '0.5rem 0', marginBottom: '0.75rem', fontSize: '0.85rem', fontWeight: 700 }}>
             <div>Tanggal: {sesi.tanggal}</div>
             <div>{formatBranchLine(sesi.warungNama)}</div>
-            <div>Status: SUDAH DITUTUP</div>
+            <div>Status: {sesi.status === 'TERBUKA' ? 'MASIH BUKA' : 'SUDAH DITUTUP'}</div>
             <div>Pkl: {tutupStr}</div>
           </div>
 
@@ -393,7 +408,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
         <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
           <div>Tanggal: {sesi.tanggal}</div>
           <div>{formatBranchLine(sesi.warungNama)}</div>
-          <div>Status: SUDAH DITUTUP</div>
+          <div>Status: {sesi.status === 'TERBUKA' ? 'MASIH BUKA' : 'SUDAH DITUTUP'}</div>
           <div>Pkl: {tutupStr}</div>
         </div>
         <div className="print-divider" />

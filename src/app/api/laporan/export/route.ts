@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 import { getAuthContext, isOwner, requireWarungAccess } from '@/lib/auth'
-import { getKasirSessionState } from '@/lib/kasir-session'
+import { buildLaporanHarian } from '@/lib/laporan-shift'
+import { getStoreDateKey, getStoreDayRangeForDateKey, formatWibShortDateTime } from '@/lib/time'
 import { normalizeKategoriNama, TANPA_KATEGORI } from '@/lib/kategori'
 import ExcelJS from 'exceljs'
 
-// GET /api/laporan/export — export laporan ke Excel
-// Query params: warung_id (required untuk owner)
+// GET /api/laporan/export — export laporan harian (per shift) ke Excel
+// Query params: warung_id (required untuk owner), tanggal (YYYY-MM-DD, default hari ini WIB)
 export async function GET(request: NextRequest) {
   try {
     const context = getAuthContext(request)
@@ -35,31 +36,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
     }
 
-    const kasirId = context.user.id
-    const state = await getKasirSessionState(prisma, warungId, kasirId)
-    if (!state.isClosed) {
-      return NextResponse.json({ success: false, message: 'Tutup kasir terlebih dahulu sebelum mencetak laporan.' }, { status: 409 })
-    }
+    const dateKey = searchParams.get('tanggal')?.trim() || getStoreDateKey()
+    const day = getStoreDayRangeForDateKey(dateKey)
+    const laporan = await buildLaporanHarian(prisma, warungId, dateKey)
 
-    const startDate = state.sessionStart
-    const endDate = state.sessionEnd
-
-    // Ambil info warung
-    const warung = await prisma.warung.findUnique({
-      where: { id: warungId },
-      select: { nama: true, kode: true },
-    })
-
-    // Export hanya untuk siklus kasir yang baru ditutup.
+    const shiftIds = laporan.shifts.map((shift) => shift.id).filter((id) => id !== 'legacy')
     const transaksis = await prisma.transaksi.findMany({
       where: {
         warungId,
-        kasirId,
-        createdAt: { gte: state.sessionStart, lte: state.sessionEnd },
         status: 'SELESAI',
+        OR: [
+          ...(shiftIds.length > 0 ? [{ shiftId: { in: shiftIds } }] : []),
+          { shiftId: null, createdAt: { gte: day.today, lt: day.tomorrow } },
+        ],
       },
       include: { items: true },
-      orderBy: { tanggal: 'asc' },
+      orderBy: { createdAt: 'asc' },
     })
 
     const menuIds = [...new Set(transaksis.flatMap((transaksi) => transaksi.items.map((item) => item.menuId)))]
@@ -68,71 +60,55 @@ export async function GET(request: NextRequest) {
       select: { id: true, category: { select: { nama: true } } },
     })
     const kategoriMap = new Map(menus.map((menu) => [menu.id, normalizeKategoriNama(menu.category?.nama)]))
+    const shiftLabel = new Map(laporan.shifts.map((shift) => [shift.id, shift.label]))
 
-    // Buat workbook Excel
     const workbook = new ExcelJS.Workbook()
     workbook.creator = DEFAULT_BRANCH_NAME
     workbook.created = new Date()
 
-    // Sheet 1: Rekap Harian
-    const dailySheet = workbook.addWorksheet('Rekap Harian')
-    
-    // Header
+    const dailySheet = workbook.addWorksheet('Rekap Shift')
     dailySheet.columns = [
-      { header: 'Tanggal', key: 'tanggal', width: 15 },
-      { header: 'Jumlah Transaksi', key: 'jumlahTransaksi', width: 20 },
+      { header: 'Tanggal', key: 'tanggal', width: 14 },
+      { header: 'Shift', key: 'shift', width: 14 },
+      { header: 'Buka', key: 'buka', width: 18 },
+      { header: 'Tutup', key: 'tutup', width: 18 },
+      { header: 'Kasir Buka', key: 'pembuka', width: 20 },
+      { header: 'Kasir Tutup', key: 'penutup', width: 20 },
+      { header: 'Jumlah Transaksi', key: 'jumlahTransaksi', width: 18 },
       { header: 'Total Pendapatan', key: 'totalPendapatan', width: 20 },
     ]
-
-    // Style header
-    dailySheet.getRow(1).font = { bold: true }
-    dailySheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF4472C4' },
-    }
     dailySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    dailySheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }
 
-    // Group transaksi by date
-    const dailyData = new Map<string, { jumlahTransaksi: number; totalPendapatan: number }>()
-    
-    for (const transaksi of transaksis) {
-      const dateKey = transaksi.tanggal.toISOString().split('T')[0]
-      const existing = dailyData.get(dateKey)
-      if (existing) {
-        existing.jumlahTransaksi++
-        existing.totalPendapatan += transaksi.total
-      } else {
-        dailyData.set(dateKey, {
-          jumlahTransaksi: 1,
-          totalPendapatan: transaksi.total,
-        })
-      }
-    }
-
-    // Add data rows
-    for (const [tanggal, data] of dailyData) {
+    for (const shift of laporan.shifts) {
       dailySheet.addRow({
-        tanggal,
-        jumlahTransaksi: data.jumlahTransaksi,
-        totalPendapatan: data.totalPendapatan,
+        tanggal: dateKey,
+        shift: shift.label,
+        buka: shift.dibukaPada ? formatWibShortDateTime(new Date(shift.dibukaPada)) : '-',
+        tutup: shift.ditutupPada ? formatWibShortDateTime(new Date(shift.ditutupPada)) : (shift.status === 'TERBUKA' ? 'Masih buka' : '-'),
+        pembuka: shift.dibukaOleh,
+        penutup: shift.ditutupOleh ?? '-',
+        jumlahTransaksi: shift.totalTransaksi,
+        totalPendapatan: shift.totalPendapatan,
       })
     }
-
-    // Add total row
     const totalRow = dailySheet.addRow({
       tanggal: 'TOTAL',
-      jumlahTransaksi: Array.from(dailyData.values()).reduce((sum, d) => sum + d.jumlahTransaksi, 0),
-      totalPendapatan: Array.from(dailyData.values()).reduce((sum, d) => sum + d.totalPendapatan, 0),
+      shift: '',
+      buka: '',
+      tutup: '',
+      pembuka: '',
+      penutup: '',
+      jumlahTransaksi: laporan.jumlahTransaksi,
+      totalPendapatan: laporan.grandTotalPendapatan,
     })
     totalRow.font = { bold: true }
 
-    // Sheet 2: Detail Transaksi
     const detailSheet = workbook.addWorksheet('Detail Transaksi')
-    
     detailSheet.columns = [
       { header: 'ID Transaksi', key: 'id', width: 36 },
-      { header: 'Tanggal', key: 'tanggal', width: 15 },
+      { header: 'Waktu', key: 'waktu', width: 18 },
+      { header: 'Shift', key: 'shift', width: 22 },
       { header: 'Meja', key: 'meja', width: 10 },
       { header: 'Menu', key: 'menu', width: 30 },
       { header: 'Kategori', key: 'kategori', width: 20 },
@@ -141,22 +117,15 @@ export async function GET(request: NextRequest) {
       { header: 'Subtotal', key: 'subtotal', width: 15 },
       { header: 'Total Transaksi', key: 'totalTransaksi', width: 18 },
     ]
-
-    // Style header
-    detailSheet.getRow(1).font = { bold: true }
-    detailSheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF4472C4' },
-    }
     detailSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    detailSheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }
 
-    // Add data rows
     for (const transaksi of transaksis) {
       for (const item of transaksi.items) {
         detailSheet.addRow({
           id: transaksi.id,
-          tanggal: transaksi.tanggal.toISOString().split('T')[0],
+          waktu: formatWibShortDateTime(transaksi.createdAt),
+          shift: transaksi.shiftId ? shiftLabel.get(transaksi.shiftId) ?? '-' : 'Tanpa shift (data lama)',
           meja: transaksi.nomorMeja,
           menu: item.namaMenu,
           kategori: kategoriMap.get(item.menuId) ?? TANPA_KATEGORI,
@@ -168,12 +137,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Generate buffer
     const buffer = await workbook.xlsx.writeBuffer()
+    const filename = `laporan-${laporan.warung.kode || 'all'}-${dateKey}.xlsx`
 
-    // Return file
-    const filename = `laporan-${warung?.kode || 'all'}-${startDate.toISOString().split('T')[0]}-${endDate.toISOString().split('T')[0]}.xlsx`
-    
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -182,6 +148,9 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[GET /api/laporan/export]', error)
+    if (error instanceof Error && error.message.startsWith('Format tanggal')) {
+      return NextResponse.json({ success: false, message: error.message }, { status: 422 })
+    }
     return NextResponse.json({ success: false, message: 'Gagal export laporan.' }, { status: 500 })
   }
 }

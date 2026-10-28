@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, requireKasirAccess } from '@/lib/auth'
-import { getKasirSessionState } from '@/lib/kasir-session'
+import { getOpenShift } from '@/lib/kasir-shift'
 import { recordActivity } from '@/lib/activity-log'
+import { apiRateLimiter } from '@/lib/rate-limiter'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,38 +20,48 @@ export async function POST(request: NextRequest) {
     if (context!.user.role === 'OWNER' && !await prisma.warung.findUnique({ where: { id: warungId }, select: { id: true } })) {
       return NextResponse.json({ success: false, message: 'Warung tidak ditemukan.' }, { status: 400 })
     }
+
+    const rateLimitKey = `kasir:buka:${warungId}:${context!.user.id}`
+    const { allowed } = apiRateLimiter.check(rateLimitKey)
+    if (!allowed) {
+      return NextResponse.json({ success: false, message: 'Terlalu banyak request. Coba lagi sebentar.' }, { status: 429 })
+    }
+
     const userId = context!.user.id
-
+    const catatan = typeof body.catatan === 'string' ? body.catatan.trim().slice(0, 500) || null : null
     const openedAt = new Date()
-    const result = await prisma.$transaction(async (tx) => {
-      const state = await getKasirSessionState(tx, warungId, userId, openedAt)
-      if (state.latest && state.isClosed) {
-        const updated = await tx.kasirSesi.updateMany({
-          where: { id: state.latest.id, dibukaKembaliPada: null },
-          data: { dibukaPada: openedAt, dibukaKembaliPada: openedAt },
-        })
-        return updated.count === 1 ? 'REOPENED' : 'ALREADY_OPEN'
-      }
-      if (state.latest) return 'ALREADY_OPEN'
 
-      await tx.kasirSesi.create({
+    const result = await prisma.$transaction(async (tx) => {
+      const open = await getOpenShift(tx, warungId)
+      if (open) return { type: 'ALREADY_OPEN' as const, open }
+
+      const shift = await tx.kasirShift.create({
         data: {
           warungId,
-          tanggal: state.today,
+          dibukaOleh: userId,
           dibukaPada: openedAt,
-          dibukaKembaliPada: openedAt,
-          ditutupOleh: userId,
-          totalTransaksi: 0,
-          totalPendapatan: 0,
+          status: 'TERBUKA',
+          catatanBuka: catatan,
         },
       })
-      return 'OPENED'
+      await tx.kasirShiftEvent.create({
+        data: {
+          shiftId: shift.id,
+          warungId,
+          userId,
+          jenis: 'BUKA',
+          waktu: openedAt,
+          catatan,
+        },
+      })
+      return { type: 'OPENED' as const, shift }
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 
-    if (result === 'ALREADY_OPEN') {
+    if (result.type === 'ALREADY_OPEN') {
       return NextResponse.json({
         success: false,
-        message: 'Kasir hari ini sudah terbuka.',
+        message: 'Kasir masih terbuka. Tutup shift yang sedang berjalan terlebih dahulu sebelum membuka shift baru.',
+        data: { shiftId: result.open.id, dibukaPada: result.open.dibukaPada },
       }, { status: 409 })
     }
 
@@ -59,18 +70,18 @@ export async function POST(request: NextRequest) {
         userId,
         warungId,
         aktivitas: 'BUKA_KASIR',
-        detail: result === 'REOPENED' ? 'Sesi kasir dibuka kembali' : 'Sesi kasir baru dibuka',
+        detail: 'Shift kasir baru dibuka',
       })
     } catch { /* ignore */ }
 
     return NextResponse.json({
       success: true,
-      message: result === 'REOPENED' ? 'Kasir berhasil dibuka kembali.' : 'Kasir berhasil dibuka dengan sesi transaksi baru.',
-      data: { dibukaPada: openedAt },
+      message: 'Kasir berhasil dibuka.',
+      data: { shiftId: result.shift.id, dibukaPada: openedAt },
     })
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
-      return NextResponse.json({ success: false, message: 'Status kasir baru saja berubah. Silakan coba lagi.' }, { status: 409 })
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === 'P2034' || error.code === 'P2002')) {
+      return NextResponse.json({ success: false, message: 'Kasir masih terbuka atau status baru saja berubah. Silakan coba lagi.' }, { status: 409 })
     }
     console.error('[POST /api/kasir/buka]', error)
     const msg = error instanceof Error ? error.message : String(error)

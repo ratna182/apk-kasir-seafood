@@ -45,9 +45,8 @@ export default async function TransaksiPage() {
     prisma.transaksi.findMany({
       where: {
         warungId: activeSession.warungId,
-        kasirId: activeSession.id,
+        shiftId: kasirState.shift?.id ?? '__no_open_shift__',
         status: 'OPEN',
-        createdAt: { gte: kasirState.sessionStart },
       },
       select: {
         id: true,
@@ -77,7 +76,7 @@ export default async function TransaksiPage() {
     category: m.category,
   }))
 
-  const serializedActiveOrders = (kasirState.isClosed ? [] : activeOrders).map((order) => ({
+  const serializedActiveOrders = (kasirState.shift ? activeOrders : []).map((order) => ({
     id: order.id,
     nomorMeja: order.nomorMeja,
     total: order.total,
@@ -105,7 +104,8 @@ export default async function TransaksiPage() {
           session={{ ...activeSession, warungAlamat }}
           menus={serializedMenus}
           initialActiveOrders={serializedActiveOrders}
-          isKasirClosed={kasirState.isClosed}
+          isKasirClosed={!kasirState.shift}
+          isShiftOvertime={kasirState.overtime}
         />
       </div>
     </div>

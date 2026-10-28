@@ -2,7 +2,7 @@ import { CHAR_WIDTHS } from './types'
 import { loadReceiptLogo } from './logo'
 import { centerText, createWriter, placeColumns, rightText } from './layout'
 import { DEFAULT_BRANCH_NAME, formatBranchLine } from '@/lib/branch-config'
-import { formatWibTime } from '@/lib/time'
+import { formatWibShiftRange, formatWibTime } from '@/lib/time'
 import {
   initPrinter,
   feedAndCut,
@@ -36,9 +36,24 @@ export interface LaporanAktivitasKasir {
   detail: string | null
 }
 
+export interface LaporanShift {
+  id: string
+  nomor: number
+  label: string
+  status: 'TERBUKA' | 'DITUTUP'
+  dibukaPada: string | null
+  ditutupPada: string | null
+  dibukaOleh: string
+  ditutupOleh: string | null
+  totalTransaksi: number
+  totalPendapatan: number
+  overtime: boolean
+}
+
 export interface LaporanData {
   tanggal: string
   warung: { id: string; nama: string; kode: string; alamat?: string | null }
+  shifts: LaporanShift[]
   rekap: LaporanRekapItem[]
   transaksi: LaporanTransaksi[]
   grandTotalQty: number
@@ -69,7 +84,6 @@ export async function encodeLaporan(
   cashierName: string,
   warungAlamat: string | null,
   width: '58mm' | '80mm',
-  kasirSesi?: { dibukaPada?: string | null; ditutupPada: string; ditutupOleh: string } | null,
 ): Promise<Uint8Array> {
   const w = CHAR_WIDTHS[width]
   const { emit, center } = createWriter(w)
@@ -97,9 +111,11 @@ export async function encodeLaporan(
 
   parts.push(center(`Tanggal: ${data.tanggal}`))
   parts.push(center(formatBranchLine(data.warung.nama)))
-  if (kasirSesi) {
-    parts.push(center('Status: SUDAH DITUTUP'))
-    parts.push(center(`Pkl: ${clock(kasirSesi.ditutupPada)}`))
+  for (const shift of data.shifts) {
+    parts.push(center(`${shift.label}${shift.status === 'TERBUKA' ? ' (MASIH BUKA)' : ''}`))
+    parts.push(center(formatWibShiftRange(shift.dibukaPada, shift.ditutupPada)))
+    parts.push(center(`${shift.dibukaOleh}${shift.ditutupOleh ? ` / ${shift.ditutupOleh}` : ''}`))
+    if (shift.overtime) parts.push(center('OVERTIME > 18 JAM'))
   }
 
   parts.push(emit(drawLine(w)))
@@ -141,15 +157,16 @@ export async function encodeLaporan(
   }
 
   parts.push(emit(drawLine(w)))
-  parts.push(center('DETAIL KASIR'))
+  parts.push(center('DETAIL SHIFT'))
   parts.push(emit(drawLine(w)))
 
   const labelWidth = Math.max(1, Math.floor(w * 0.72))
-  const bukaWaktu = data.aktivitasKasir.find((item) => item.aktivitas === 'BUKA_KASIR')?.waktu
   const kasirRow = (label: string, waktu: string | null | undefined) =>
     emit(padRight(centerText(label, labelWidth), labelWidth) + clock(waktu).padStart(w - labelWidth))
-  parts.push(kasirRow('Buka Kasir', bukaWaktu ?? kasirSesi?.dibukaPada))
-  parts.push(kasirRow('Tutup Kasir', kasirSesi?.ditutupPada))
+  for (const shift of data.shifts) {
+    parts.push(kasirRow(`${shift.label} buka`, shift.dibukaPada))
+    parts.push(kasirRow(`${shift.label} tutup`, shift.ditutupPada))
+  }
 
   parts.push(emit(drawLine(w)))
   parts.push(center('REKAP MENU'))

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, getKasirWarungId, requireKasirAccess } from '@/lib/auth'
-import { getKasirSessionState } from '@/lib/kasir-session'
+import { getOpenShift } from '@/lib/kasir-shift'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,8 +13,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!warungId) {
       return NextResponse.json({ success: false, message: 'Kasir tidak terdaftar di warung.' }, { status: 403 })
     }
-    const kasirId = context!.user.id
-
     const { id } = await params
     const body = await request.json()
     const qty = Number(body.qty)
@@ -24,11 +22,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const transaksi = await prisma.$transaction(async (tx) => {
-      const state = await getKasirSessionState(tx, warungId, kasirId)
-      if (state.isClosed) return 'CLOSED'
+      const shift = await getOpenShift(tx, warungId)
+      if (!shift) return 'CLOSED'
 
       const item = await tx.transaksiItem.findFirst({
-        where: { id, transaksi: { warungId, kasirId, status: 'OPEN', createdAt: { gte: state.sessionStart } } },
+        where: { id, transaksi: { warungId, shiftId: shift.id, status: 'OPEN' } },
       })
 
       if (!item) return null
@@ -75,15 +73,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!warungId) {
       return NextResponse.json({ success: false, message: 'Kasir tidak terdaftar di warung.' }, { status: 403 })
     }
-    const kasirId = context!.user.id
-
     const { id } = await params
     const transaksi = await prisma.$transaction(async (tx) => {
-      const state = await getKasirSessionState(tx, warungId, kasirId)
-      if (state.isClosed) return 'CLOSED'
+      const shift = await getOpenShift(tx, warungId)
+      if (!shift) return 'CLOSED'
 
       const item = await tx.transaksiItem.findFirst({
-        where: { id, transaksi: { warungId, kasirId, status: 'OPEN', createdAt: { gte: state.sessionStart } } },
+        where: { id, transaksi: { warungId, shiftId: shift.id, status: 'OPEN' } },
       })
 
       if (!item) return null

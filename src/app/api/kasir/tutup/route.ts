@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, requireKasirAccess } from '@/lib/auth'
-import { getKasirSessionState } from '@/lib/kasir-session'
+import { getLatestShift, getOpenShift } from '@/lib/kasir-shift'
+import { formatWibDateTime } from '@/lib/time'
 import { recordActivity } from '@/lib/activity-log'
+import { apiRateLimiter } from '@/lib/rate-limiter'
 
-// POST /api/kasir/tutup — tutup kasir hari ini
+// POST /api/kasir/tutup — tutup shift kasir yang sedang terbuka
 export async function POST(request: NextRequest) {
   try {
     const context = getAuthContext(request)
@@ -20,55 +22,75 @@ export async function POST(request: NextRequest) {
     if (context!.user.role === 'OWNER' && !await prisma.warung.findUnique({ where: { id: warungId }, select: { id: true } })) {
       return NextResponse.json({ success: false, message: 'Warung tidak ditemukan.' }, { status: 400 })
     }
-    const userId = context!.user.id
 
+    const rateLimitKey = `kasir:tutup:${warungId}:${context!.user.id}`
+    const { allowed } = apiRateLimiter.check(rateLimitKey)
+    if (!allowed) {
+      return NextResponse.json({ success: false, message: 'Terlalu banyak request. Coba lagi sebentar.' }, { status: 429 })
+    }
+
+    const userId = context!.user.id
+    const catatan = typeof body.catatan === 'string' ? body.catatan.trim().slice(0, 500) || null : null
     const closedAt = new Date()
+
     const result = await prisma.$transaction(async (tx) => {
-      const state = await getKasirSessionState(tx, warungId, userId, closedAt)
-      if (state.isClosed) return { type: 'ALREADY_CLOSED' as const, state }
+      const open = await getOpenShift(tx, warungId)
+      if (!open) {
+        const latest = await getLatestShift(tx, warungId)
+        return { type: 'ALREADY_CLOSED' as const, latest }
+      }
 
       const openOrders = await tx.transaksi.findMany({
-        where: { warungId, kasirId: userId, status: 'OPEN', createdAt: { gte: state.sessionStart } },
+        where: { warungId, shiftId: open.id, status: 'OPEN' },
         select: { nomorMeja: true },
       })
       if (openOrders.length > 0) return { type: 'OPEN_ORDERS' as const, openOrders }
 
-      await tx.transaksi.updateMany({
-        where: { warungId, kasirId: userId, status: 'OPEN', createdAt: { lt: state.sessionStart } },
-        data: { status: 'BATAL' },
+      const aggregate = await tx.transaksi.aggregate({
+        where: { warungId, shiftId: open.id, status: 'SELESAI' },
+        _count: { id: true },
+        _sum: { total: true },
       })
 
-      const transaksis = await tx.transaksi.findMany({
-        where: { warungId, kasirId: userId, createdAt: { gte: state.sessionStart, lte: closedAt }, status: 'SELESAI' },
-        select: { total: true },
-      })
-      const totalTransaksi = transaksis.length
-      const totalPendapatan = transaksis.reduce((sum, t) => sum + t.total, 0)
-      const sesi = await tx.kasirSesi.create({
+      const shift = await tx.kasirShift.update({
+        where: { id: open.id },
         data: {
-          warungId,
-          tanggal: state.today,
-          dibukaPada: state.sessionStart,
-          ditutupOleh: userId,
+          status: 'DITUTUP',
           ditutupPada: closedAt,
-          totalTransaksi,
-          totalPendapatan,
+          ditutupOleh: userId,
+          catatanTutup: catatan,
         },
       })
-      return { type: 'CLOSED' as const, state, sesi, totalTransaksi, totalPendapatan }
+      await tx.kasirShiftEvent.create({
+        data: {
+          shiftId: shift.id,
+          warungId,
+          userId,
+          jenis: 'TUTUP',
+          waktu: closedAt,
+          catatan,
+        },
+      })
+
+      return {
+        type: 'CLOSED' as const,
+        shift,
+        totalTransaksi: aggregate._count.id,
+        totalPendapatan: aggregate._sum.total ?? 0,
+      }
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
 
     if (result.type === 'ALREADY_CLOSED') {
-      return NextResponse.json({
-        success: false,
-        message: `Kasir sudah ditutup pada ${new Date(result.state.latest!.ditutupPada).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}.`,
-      }, { status: 409 })
+      const message = result.latest?.ditutupPada
+        ? `Tidak ada shift yang terbuka. Shift terakhir ditutup pada ${formatWibDateTime(result.latest.ditutupPada)} WIB.`
+        : 'Tidak ada shift yang terbuka. Buka kasir terlebih dahulu.'
+      return NextResponse.json({ success: false, message }, { status: 409 })
     }
     if (result.type === 'OPEN_ORDERS') {
-      const meja = result.openOrders.map((o) => o.nomorMeja).join(', ')
+      const meja = result.openOrders.map((order) => order.nomorMeja).join(', ')
       return NextResponse.json({
         success: false,
-        message: `Masih ada pesanan yang belum dibayar di ${meja}. Selesaikan atau hapus pesanan tersebut sebelum tutup kasir.`,
+        message: `Masih ada pesanan yang belum dibayar di ${meja}. Selesaikan pesanan tersebut sebelum tutup kasir.`,
       }, { status: 409 })
     }
 
@@ -84,9 +106,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        tanggal: result.state.today.toISOString().split('T')[0],
-        dibukaPada: result.sesi.dibukaPada,
-        ditutupPada: result.sesi.ditutupPada,
+        shiftId: result.shift.id,
+        dibukaPada: result.shift.dibukaPada?.toISOString() ?? null,
+        ditutupPada: result.shift.ditutupPada?.toISOString() ?? closedAt.toISOString(),
         totalTransaksi: result.totalTransaksi,
         totalPendapatan: result.totalPendapatan,
       },

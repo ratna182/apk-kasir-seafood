@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, UserCheck, UserX, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Plus, Pencil, UserCheck, UserX, Trash2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import { formatWibDateTime, formatWibShiftRange } from '@/lib/time'
 
 interface Warung {
   id: string
@@ -22,6 +23,24 @@ interface KasirManagerProps {
   userRole: string
 }
 
+interface ShiftInfo {
+  id: string
+  status?: 'TERBUKA' | 'DITUTUP'
+  dibukaPada: string | null
+  ditutupPada: string | null
+  dibukaOleh: string
+  ditutupOleh: string | null
+  totalTransaksi: number
+  totalPendapatan: number
+  durationHours?: number
+  overtime?: boolean
+}
+
+function durationLabel(hours: number): string {
+  const minutes = Math.max(0, Math.floor(hours * 60))
+  return `${Math.floor(minutes / 60)}j ${minutes % 60}m`
+}
+
 export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
   const [selectedWarung, setSelectedWarung] = useState(warungs[0]?.id || '')
   const [users, setUsers] = useState<KasirUser[]>([])
@@ -38,8 +57,14 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [togglingAll, setTogglingAll] = useState(false)
-  const [kasirClosed, setKasirClosed] = useState(false)
+  const [openShift, setOpenShift] = useState<ShiftInfo | null>(null)
+  const [latestShift, setLatestShift] = useState<ShiftInfo | null>(null)
   const [openingKasir, setOpeningKasir] = useState(false)
+  const [closingKasir, setClosingKasir] = useState(false)
+  const [forceCloseOpen, setForceCloseOpen] = useState(false)
+  const [forceNote, setForceNote] = useState('')
+  const [forceSubmitting, setForceSubmitting] = useState(false)
+  const [forceError, setForceError] = useState<string | null>(null)
 
   useEffect(() => {
     if (selectedWarung) {
@@ -67,12 +92,11 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
 
   async function checkKasirStatus() {
     try {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
       const res = await fetch(`/api/kasir/status?warungId=${selectedWarung}`)
       const result = await res.json()
       if (result.success) {
-        setKasirClosed(result.data.sudahTutup)
+        setOpenShift(result.data.shift ?? null)
+        setLatestShift(result.data.latestShift ?? null)
       }
     } catch {
       // silent
@@ -80,7 +104,7 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
   }
 
   async function handleOpenKasir() {
-    if (!confirm('Yakin ingin membuka kasir hari ini? Kasir akan bisa bertransaksi lagi.')) return
+    if (!confirm('Buka shift kasir baru sekarang?')) return
     setOpeningKasir(true)
     try {
       const res = await fetch('/api/kasir/buka', {
@@ -90,8 +114,8 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
       })
       const result = await res.json()
       if (result.success) {
-        setFeedback({ type: 'success', message: 'Kasir hari ini berhasil dibuka kembali!' })
-        setKasirClosed(false)
+        setFeedback({ type: 'success', message: 'Shift kasir berhasil dibuka.' })
+        await checkKasirStatus()
       } else {
         setFeedback({ type: 'error', message: result.message || 'Gagal membuka kasir.' })
       }
@@ -99,6 +123,58 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
       setFeedback({ type: 'error', message: 'Terjadi kesalahan sistem' })
     } finally {
       setOpeningKasir(false)
+    }
+  }
+
+  async function handleTutupKasir() {
+    if (!confirm('Tutup shift kasir yang sedang berjalan?')) return
+    setClosingKasir(true)
+    try {
+      const res = await fetch('/api/kasir/tutup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ warungId: selectedWarung }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        setFeedback({ type: 'success', message: 'Shift kasir berhasil ditutup.' })
+        await checkKasirStatus()
+      } else {
+        setFeedback({ type: 'error', message: result.message || 'Gagal menutup kasir.' })
+      }
+    } catch {
+      setFeedback({ type: 'error', message: 'Terjadi kesalahan sistem' })
+    } finally {
+      setClosingKasir(false)
+    }
+  }
+
+  async function handleTutupPaksa() {
+    if (forceNote.trim().length < 5) {
+      setForceError('Catatan wajib diisi minimal 5 karakter.')
+      return
+    }
+    setForceSubmitting(true)
+    setForceError(null)
+    try {
+      const res = await fetch('/api/kasir/tutup-paksa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ warungId: selectedWarung, catatan: forceNote.trim() }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        setForceCloseOpen(false)
+        setForceNote('')
+        setFeedback({ type: 'success', message: result.message || 'Shift ditutup paksa.' })
+        await checkKasirStatus()
+      } else {
+        setForceError(result.message || 'Gagal menutup paksa shift.')
+      }
+    } catch {
+      setForceError('Terjadi kesalahan sistem.')
+    } finally {
+      setForceSubmitting(false)
     }
   }
 
@@ -257,14 +333,19 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
           <p className="text-secondary text-sm">Kelola akun kasir untuk setiap outlet</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {kasirClosed && (
+          {!openShift && (
             <button type="button" onClick={handleOpenKasir} disabled={openingKasir} className="btn btn-success">
               {openingKasir ? 'Membuka...' : 'Buka Kasir'}
             </button>
           )}
-          {!kasirClosed && (
-            <button type="button" disabled className="btn btn-ghost" style={{ opacity: 0.6 }}>
-              Kasir Sudah Terbuka
+          {openShift && (
+            <button type="button" onClick={handleTutupKasir} disabled={closingKasir} className="btn btn-danger">
+              {closingKasir ? 'Menutup...' : 'Tutup Shift'}
+            </button>
+          )}
+          {userRole === 'OWNER' && openShift && (
+            <button type="button" onClick={() => { setForceCloseOpen(true); setForceNote(''); setForceError(null) }} className="btn btn-ghost" style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}>
+              Tutup Paksa
             </button>
           )}
           {userRole === 'OWNER' && (
@@ -297,6 +378,50 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', borderLeft: `3px solid ${openShift?.overtime ? 'var(--color-danger)' : openShift ? 'var(--color-success)' : 'var(--color-border)'}` }}>
+        {openShift ? (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+              <div>
+                <strong>Shift Buka</strong>
+                <p className="text-sm text-secondary" style={{ margin: 0 }}>
+                  {formatWibShiftRange(openShift.dibukaPada, openShift.ditutupPada)} • oleh {openShift.dibukaOleh}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <strong style={{ color: openShift.overtime ? 'var(--color-danger)' : 'inherit' }}>
+                  {durationLabel(openShift.durationHours ?? 0)}
+                </strong>
+                <p className="text-sm text-secondary" style={{ margin: 0 }}>
+                  {openShift.totalTransaksi} transaksi • Rp {openShift.totalPendapatan.toLocaleString('id-ID')}
+                </p>
+              </div>
+            </div>
+            {openShift.overtime && (
+              <div className="alert alert-error" style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+                <div>
+                  <AlertTriangle size={16} style={{ verticalAlign: 'middle', marginRight: '0.35rem' }} />
+                  Shift sudah berjalan &gt; 18 jam. {userRole === 'OWNER' ? 'Gunakan Tutup Paksa dengan catatan.' : 'Minta owner menutup paksa shift.'}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : latestShift ? (
+          <div>
+            <strong>Shift Terakhir Ditutup</strong>
+            <p className="text-sm text-secondary" style={{ margin: 0 }}>
+              {formatWibShiftRange(latestShift.dibukaPada, latestShift.ditutupPada)}
+              {latestShift.ditutupOleh ? ` oleh ${latestShift.ditutupOleh}` : ''} • {latestShift.totalTransaksi} transaksi
+            </p>
+          </div>
+        ) : (
+          <div>
+            <strong>Belum Ada Shift</strong>
+            <p className="text-sm text-secondary" style={{ margin: 0 }}>Buka kasir untuk mulai menerima transaksi.</p>
+          </div>
+        )}
       </div>
 
       <div className="table-container">
@@ -434,6 +559,36 @@ export default function KasirManager({ warungs, userRole }: KasirManagerProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {forceCloseOpen && openShift && (
+        <div className="modal-overlay" onClick={() => setForceCloseOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="modal-title" style={{ color: 'var(--color-danger)' }}>Tutup Paksa Shift</h2>
+            <p className="text-sm text-secondary">
+              Shift dibuka {formatWibDateTime(openShift.dibukaPada)} WIB oleh {openShift.dibukaOleh}. Durasi {durationLabel(openShift.durationHours ?? 0)}.
+            </p>
+            <div className="alert alert-warning" style={{ marginBottom: '1rem' }}>
+              Pesanan yang belum dibayar pada shift ini akan dibatalkan. Catatan tersimpan permanen di log shift.
+            </div>
+            <div className="form-group">
+              <label className="form-label">Catatan (wajib)</label>
+              <textarea
+                className="form-input"
+                rows={3}
+                value={forceNote}
+                onChange={(e) => setForceNote(e.target.value)}
+                placeholder="Contoh: kasir lupa menutup shift, sudah dikonfirmasi via telepon."
+              />
+            </div>
+            {forceError && <div className="alert alert-error">{forceError}</div>}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setForceCloseOpen(false)} disabled={forceSubmitting}>Batal</button>
+              <button type="button" className="btn btn-danger" onClick={handleTutupPaksa} disabled={forceSubmitting}>
+                {forceSubmitting ? 'Memproses...' : 'Tutup Paksa'}
+              </button>
+            </div>
           </div>
         </div>
       )}
