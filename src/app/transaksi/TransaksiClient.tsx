@@ -2,8 +2,9 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, ShoppingCart, X, Minus, Plus, Printer, CreditCard, Banknote, CheckCircle, Trash2, Pencil } from 'lucide-react'
+import { Search, ShoppingCart, X, Minus, Plus, Printer, CreditCard, Banknote, CheckCircle, Trash2, Pencil, Eye } from 'lucide-react'
 import Receipt, { type PrinterWidth } from '@/components/Receipt'
+import NotaPreview, { type NotaPreviewItem } from '@/components/NotaPreview'
 import PrinterSetup from '@/components/PrinterSetup'
 import PrinterStatusBadge from '@/components/PrinterStatus'
 import { printer } from '@/lib/printer'
@@ -58,6 +59,18 @@ type ActiveOrder = CompletedTransaksi & {
 type ReceiptPaymentMeta = {
   uangDiterima: number
   kembalian: number
+}
+
+type PreviewNotaData = {
+  orderId: string | null
+  nomorMeja: string
+  warungNama: string
+  warungAlamat: string | null
+  generatedAt: string
+  items: NotaPreviewItem[]
+  total: number
+  existingTotal: number
+  addedTotal: number
 }
 
 interface TransaksiClientProps {
@@ -116,6 +129,10 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   const [kembalianResult, setKembalianResult] = useState<ReturnType<typeof hitungKembalian> | null>(null)
   const [receiptPayment, setReceiptPayment] = useState<ReceiptPaymentMeta | null>(null)
   const [showBayarLangsung, setShowBayarLangsung] = useState(false)
+  const [showPreviewNota, setShowPreviewNota] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState('')
+  const [previewData, setPreviewData] = useState<PreviewNotaData | null>(null)
   const [bayarLangsungMetode, setBayarLangsungMetode] = useState<'CASH' | 'QRIS' | 'TRANSFER'>('CASH')
   const [bayarLangsungUang, setBayarLangsungUang] = useState<number | ''>('')
   const [bayarLangsungError, setBayarLangsungError] = useState('')
@@ -204,6 +221,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     setSuccess('')
     setUangDiterima('')
     setShowBayarLangsung(false)
+    setShowPreviewNota(false)
     resetIdempotencyKey()
   }
 
@@ -266,6 +284,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     setSuccess('')
     setUangDiterima('')
     setShowBayarLangsung(false)
+    setShowPreviewNota(false)
     setBayarLangsungUang('')
     setBayarLangsungError('')
   }
@@ -398,6 +417,65 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
     setShowBayarLangsung(true)
   }
 
+  function closePreviewNota() {
+    setShowPreviewNota(false)
+    setPreviewError('')
+    setPreviewData(null)
+  }
+
+  async function openPreviewNota() {
+    setError('')
+    setSuccess('')
+    setPreviewError('')
+    if (isKasirClosed) { setError('Buka kasir terlebih dahulu.'); return }
+    if (!nomorMeja.trim()) { setError('Harap masukkan nomor meja atau pilih dari tombol meja.'); return }
+    if (cart.length === 0 && !selectedOrder) { setError('Keranjang pesanan masih kosong. Pilih menu di sebelah kiri.'); return }
+
+    setPreviewData(null)
+    setShowPreviewNota(true)
+    setPreviewLoading(true)
+    try {
+      const res = await fetch('/api/transaksi/preview-nota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nomorMeja: nomorMeja.trim(),
+          orderId: selectedOrder?.id,
+          items: cart.map((item) => ({
+            menuId: item.menuId,
+            qty: item.qty,
+            hargaSatuan: item.hargaSementara ?? item.harga,
+            diskonSatuan: item.diskonSatuan,
+            catatan: item.catatan,
+          })),
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setPreviewError(data.message || 'Gagal memuat preview nota.')
+        return
+      }
+      setPreviewData(data.data)
+    } catch {
+      setPreviewError('Koneksi internet bermasalah. Gagal memuat preview nota.')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  function handlePreviewPay() {
+    setShowPreviewNota(false)
+    setPreviewError('')
+    openBayarLangsung()
+  }
+
+  function handlePreviewSave() {
+    if (cart.length === 0) return
+    setShowPreviewNota(false)
+    setPreviewError('')
+    void handleCheckout()
+  }
+
   async function handleBayarLangsung() {
     if (isKasirClosed) { setBayarLangsungError('Buka kasir terlebih dahulu.'); return }
     if (!nomorMeja.trim()) { setBayarLangsungError('Harap masukkan nomor meja atau pilih dari tombol meja.'); return }
@@ -450,6 +528,7 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       setReceiptPayment(payment)
       setCompletedTransaksi(data.data)
       setShowBayarLangsung(false)
+      setShowPreviewNota(false)
       setShowReceiptModal(true)
       resetIdempotencyKey()
       setCart([])
@@ -858,6 +937,16 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
                 Rp {grandTotal.toLocaleString('id-ID')}
               </span>
             </div>
+            <button
+              type="button"
+              id="btn-preview-nota"
+              onClick={openPreviewNota}
+              disabled={isKasirClosed || paying || submitting || (cart.length === 0 && !selectedOrder)}
+              className="btn btn-ghost"
+              style={{ width: '100%', minHeight: '48px', justifyContent: 'center', gap: '0.5rem', fontWeight: 700, border: '1px solid var(--color-border)' }}
+            >
+              <Eye size={18} /> Preview Nota
+            </button>
           </div>
 
           {error && (
@@ -1004,6 +1093,71 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
             <label className="item-edit-option"><input type="checkbox" checked={Boolean(editingCartItem.catatan)} onChange={(event) => setEditingCartItem({ ...editingCartItem, catatan: event.target.checked ? ' ' : '' })} /> Tambah catatan singkat</label>
             {editingCartItem.catatan && <input type="text" maxLength={160} className="form-input" placeholder="Contoh: pilih yang besar" value={editingCartItem.catatan} onChange={(event) => setEditingCartItem({ ...editingCartItem, catatan: event.target.value })} />}
             <button type="button" onClick={saveCartItemEdit} className="btn btn-primary item-edit-save">SIMPAN</button>
+          </div>
+        </div>
+      )}
+
+      {showPreviewNota && (
+        <div
+          className="modal-overlay no-print"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="preview-nota-title"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 1000 }}
+          onClick={(event) => { if (event.target === event.currentTarget && !previewLoading && !paying && !submitting) closePreviewNota() }}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: '480px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', padding: '1.25rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexShrink: 0 }}>
+              <div>
+                <h2 id="preview-nota-title" style={{ fontSize: '1.15rem', margin: 0 }}>Preview Nota</h2>
+                <p className="text-secondary" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem' }}>Belum dibayar.</p>
+              </div>
+              <button
+                type="button"
+                onClick={closePreviewNota}
+                disabled={previewLoading || paying || submitting}
+                className="btn btn-ghost"
+                style={{ minWidth: '44px', minHeight: '44px', padding: 0, justifyContent: 'center' }}
+                aria-label="Tutup preview nota"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', marginBottom: '0.75rem' }}>
+              {previewLoading && (
+                <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--color-text-secondary)' }}>
+                  Memuat preview nota...
+                </div>
+              )}
+              {!previewLoading && previewError && (
+                <div className="alert alert-error" role="alert" style={{ fontSize: '0.9rem' }}>
+                  {previewError}
+                </div>
+              )}
+              {!previewLoading && previewData && (
+                <NotaPreview
+                  branchName={previewData.warungNama || session.warungNama}
+                  nomorMeja={previewData.nomorMeja}
+                  createdAt={previewData.generatedAt}
+                  items={previewData.items}
+                  total={previewData.total}
+                  label="PREVIEW / BELUM DIBAYAR"
+                />
+              )}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.5rem', flexShrink: 0 }}>
+              <button type="button" onClick={closePreviewNota} disabled={previewLoading || paying || submitting} className="btn btn-ghost" style={{ minHeight: '48px', justifyContent: 'center' }}>
+                Kembali
+              </button>
+              <button type="button" onClick={handlePreviewPay} disabled={!previewData || paying || submitting} className="btn btn-primary" style={{ minHeight: '48px', justifyContent: 'center', fontWeight: 800 }}>
+                BAYAR
+              </button>
+              <button type="button" onClick={handlePreviewSave} disabled={!previewData || cart.length === 0 || submitting || paying} className="btn btn-ghost" style={{ minHeight: '48px', justifyContent: 'center', fontWeight: 800, border: '1px solid var(--color-border)' }}>
+                {submitting ? 'Menyimpan...' : 'SIMPAN'}
+              </button>
+            </div>
           </div>
         </div>
       )}
