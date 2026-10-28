@@ -543,7 +543,7 @@ export default function LaporanClient({ warungId, warungNama, warungKode, warung
         <div className="print-only print-receipt">
           <div className="print-header">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="receipt-logo" src="/logo-struk.webp" alt="Seafood 08 Vian Jaya" style={{ display: 'block', width: '1.7cm', height: '1.7cm', objectFit: 'contain', margin: '0 auto 3px' }} />
+            <img className="receipt-logo" src="/logo-baru.webp" alt="Seafood 08 Vian Jaya" style={{ display: 'block', width: '1.7cm', height: '1.7cm', objectFit: 'contain', margin: '0 auto 3px' }} />
             {data.warung.alamat && <p>{data.warung.alamat}</p>}
             <div className="receipt-socials">
               <p>IG : Seafood08vianjaya.id</p>

@@ -379,7 +379,7 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
       <div className="print-only print-receipt" id={`print-receipt-${sesi.id}`}>
         <div className="print-header">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="receipt-logo" src="/logo-struk.webp" alt="Seafood 08 Vian Jaya" style={{ display: 'block', width: '1.7cm', height: '1.7cm', objectFit: 'contain', margin: '0 auto 3px' }} />
+          <img className="receipt-logo" src="/logo-baru.webp" alt="Seafood 08 Vian Jaya" style={{ display: 'block', width: '1.7cm', height: '1.7cm', objectFit: 'contain', margin: '0 auto 3px' }} />
           {sesi.warungAlamat && <p>{sesi.warungAlamat}</p>}
           <div className="receipt-socials">
             <p>IG : Seafood08vianjaya.id</p>

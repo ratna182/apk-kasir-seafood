@@ -41,7 +41,7 @@ export default function Receipt({ transaction, cashier, warungNama, warungAlamat
     <div className={`${preview ? 'receipt-preview' : 'print-only print-receipt'} receipt-${width} ${isCompact ? 'compact' : ''}`}>
       <div className="print-header">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="receipt-logo" src="/logo-struk.webp" alt="Seafood 08 Vian Jaya" />
+        <img className="receipt-logo" src="/logo-baru.webp" alt="Seafood 08 Vian Jaya" />
         <p className="receipt-branch">{formatBranchLine(warungNama)}</p>
         {warungAlamat && <p>{warungAlamat}</p>}
         <div className="receipt-socials">
