@@ -9,6 +9,7 @@ import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeLaporan } from '@/lib/printer/laporan-encoder'
 import { formatBranchLine } from '@/lib/branch-config'
 import { formatWibDateTime, formatWibShiftRange, formatWibTime } from '@/lib/time'
+import { resolveLaporanSummary } from '@/lib/laporan-summary'
 import { isKategoriMinuman } from '@/lib/kategori'
 
 interface RekapItem {
@@ -289,6 +290,8 @@ export default function LaporanClient({ warungId, warungNama, warungs, role, ini
   const hasReport = Boolean(data && (data.shifts.length > 0 || data.rekap.length > 0))
   const openDuration = openShift?.durationHours ?? 0
   const isOvertime = Boolean(openShift?.overtime)
+  const summary = resolveLaporanSummary(data, openShift, tanggal)
+  const summaryTitle = summary?.scope === 'SHIFT' ? 'Ringkasan Shift Aktif' : 'Ringkasan Harian'
 
   return (
     <div>
@@ -396,22 +399,26 @@ export default function LaporanClient({ warungId, warungNama, warungs, role, ini
         </div>
       )}
 
+      <div className="no-print" style={{ marginBottom: '0.6rem', fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+        {summaryTitle}
+      </div>
+
       <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.75rem' }}>
         <div className="card" style={{ textAlign: 'center', padding: '1.25rem' }}>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--color-brand)', fontFamily: "var(--font-fraunces), serif" }}>
-            {data ? data.jumlahTransaksi : '...'}
+            {summary ? summary.jumlahTransaksi : '...'}
           </div>
           <div className="text-sm text-muted">Jumlah Transaksi</div>
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '1.25rem' }}>
           <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--color-text-primary)', fontFamily: "var(--font-fraunces), serif" }}>
-            {data ? data.grandTotalQty : '...'}
+            {summary ? summary.grandTotalQty : '...'}
           </div>
           <div className="text-sm text-muted">Total Porsi / Item Terjual</div>
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '1.25rem' }}>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-success)', fontFamily: "var(--font-fraunces), serif", fontVariantNumeric: 'tabular-nums' }}>
-            {data ? `Rp ${data.grandTotalPendapatan.toLocaleString('id-ID')}` : '...'}
+            {summary ? `Rp ${summary.grandTotalPendapatan.toLocaleString('id-ID')}` : '...'}
           </div>
           <div className="text-sm text-muted">Total Pendapatan</div>
         </div>
@@ -420,19 +427,19 @@ export default function LaporanClient({ warungId, warungNama, warungs, role, ini
       <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
         <div className="card" style={{ textAlign: 'center', padding: '1rem', borderLeft: '3px solid var(--color-success)' }}>
           <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-success)', fontFamily: "var(--font-fraunces), serif" }}>
-            {data ? `Rp ${(data.totalCash || 0).toLocaleString('id-ID')}` : '...'}
+            {summary ? `Rp ${(summary.totalCash || 0).toLocaleString('id-ID')}` : '...'}
           </div>
           <div className="text-xs text-muted">Cash</div>
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '1rem', borderLeft: '3px solid var(--color-warning)' }}>
           <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-warning)', fontFamily: "var(--font-fraunces), serif" }}>
-            {data ? `Rp ${(data.totalQRIS || 0).toLocaleString('id-ID')}` : '...'}
+            {summary ? `Rp ${(summary.totalQRIS || 0).toLocaleString('id-ID')}` : '...'}
           </div>
           <div className="text-xs text-muted">QRIS</div>
         </div>
         <div className="card" style={{ textAlign: 'center', padding: '1rem', borderLeft: '3px solid var(--color-info)' }}>
           <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-info)', fontFamily: "var(--font-fraunces), serif" }}>
-            {data ? `Rp ${(data.totalTransfer || 0).toLocaleString('id-ID')}` : '...'}
+            {summary ? `Rp ${(summary.totalTransfer || 0).toLocaleString('id-ID')}` : '...'}
           </div>
           <div className="text-xs text-muted">Transfer</div>
         </div>
