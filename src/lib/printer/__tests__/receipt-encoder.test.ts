@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodeReceipt } from '../receipt-encoder'
+import { buildReceiptLines, createReceiptData } from '../receipt-content'
 import { encodeRasterImage } from '../escpos'
 
 const logo = vi.hoisted(() => ({ load: vi.fn(async (): Promise<Uint8Array | null> => null) }))
@@ -138,6 +139,24 @@ describe('encodeReceipt', () => {
     expect(pad * 2 + 20 * 2).toBeLessThanOrEqual(48)
   })
 
+  it('prints exactly the lines shared with the receipt preview', async () => {
+    const input = {
+      transaction: { ...TRANSACTION, metodePembayaran: 'CASH' },
+      cashier: 'Murtoni',
+      warungNama: null,
+      warungAlamat: 'Jl. Raya Kranggan no.18',
+      width: '80mm' as const,
+      uangDiterima: 50000,
+    }
+
+    const output = await encodeReceipt(input)
+    const expected = buildReceiptLines(createReceiptData(input), 48).map((line) => line.text)
+    const decoded = receiptLines(output)
+
+    expect(decoded.slice(0, expected.length)).toEqual(expected)
+    expect(decoded.slice(expected.length).every((line) => line === '')).toBe(true)
+  })
+
   it('follows the reference block order: logo, name, address, socials, date with cashier', async () => {
     const lines = receiptLines(
       await encodeReceipt({
@@ -249,7 +268,7 @@ describe('encodeReceipt', () => {
       }),
     )
 
-    expect(lines.some((line) => line.startsWith('Bayar (Cash)'))).toBe(true)
+    expect(lines.some((line) => line.startsWith('Bayar (Cash)') && line.endsWith('Rp 50.000'))).toBe(true)
     expect(lines.some((line) => line.startsWith('Kembali') && line.endsWith('Rp 15.000'))).toBe(true)
     const qris = receiptLines(
       await encodeReceipt({
@@ -259,7 +278,7 @@ describe('encodeReceipt', () => {
         width: '80mm',
       }),
     )
-    expect(qris.some((line) => line.startsWith('Bayar (Qris)'))).toBe(true)
+    expect(qris.some((line) => line.startsWith('Bayar (QRIS)'))).toBe(true)
   })
 
   it('never guesses a payment method that is missing or unknown', async () => {
