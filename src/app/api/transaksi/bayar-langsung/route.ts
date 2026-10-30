@@ -17,6 +17,7 @@ import {
   type CheckoutItemInput,
   type MetodePembayaranInput,
 } from '@/lib/transaksi-checkout'
+import { isRupiahAmount } from '@/lib/rupiah'
 
 const TRANSAKSI_INCLUDE = {
   items: { orderBy: { createdAt: 'asc' as const } },
@@ -257,7 +258,7 @@ export async function POST(request: NextRequest) {
     if (payload.orderId !== undefined && payload.orderId !== null && !orderId) {
       return NextResponse.json({ success: false, message: 'Order tersimpan tidak valid.' }, { status: 422 })
     }
-    if (metodePembayaran === 'CASH' && (typeof uangDiterima !== 'number' || !Number.isInteger(uangDiterima) || uangDiterima < 0)) {
+    if (metodePembayaran === 'CASH' && !isRupiahAmount(uangDiterima)) {
       return NextResponse.json({ success: false, message: 'Uang diterima wajib diisi dengan angka bulat.' }, { status: 422 })
     }
 

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
 import { sortByName } from '@/lib/menu-sort'
+import RupiahInput from '@/components/RupiahInput'
+import { isRupiahAmount } from '@/lib/rupiah'
 
 interface Category {
   id: string
@@ -35,7 +37,7 @@ export default function MenuManager() {
 
   const [menuModalOpen, setMenuModalOpen] = useState(false)
   const [editingMenu, setEditingMenu] = useState<MenuItem | null>(null)
-  const [menuForm, setMenuForm] = useState({ nama: '', harga: '', categoryId: '', isAktif: true })
+  const [menuForm, setMenuForm] = useState<{ nama: string; harga: number | ''; categoryId: string; isAktif: boolean }>({ nama: '', harga: '', categoryId: '', isAktif: true })
   const [menuErrors, setMenuErrors] = useState<Record<string, string>>({})
   const [menuSaving, setMenuSaving] = useState(false)
   const [deletingMenuId, setDeletingMenuId] = useState<string | null>(null)
@@ -160,7 +162,7 @@ export default function MenuManager() {
 
   function openEditMenu(menu: MenuItem) {
     setEditingMenu(menu)
-    setMenuForm({ nama: menu.nama, harga: menu.harga.toString(), categoryId: menu.categoryId, isAktif: menu.isAktif })
+    setMenuForm({ nama: menu.nama, harga: menu.harga, categoryId: menu.categoryId, isAktif: menu.isAktif })
     setMenuErrors({})
     setMenuModalOpen(true)
   }
@@ -170,7 +172,7 @@ export default function MenuManager() {
     setMenuErrors({})
     const errors: Record<string, string> = {}
     if (!menuForm.nama.trim()) errors.nama = 'Nama menu wajib diisi.'
-    if (!menuForm.harga || isNaN(Number(menuForm.harga)) || Number(menuForm.harga) < 0) errors.harga = 'Harga harus angka valid.'
+    if (!isRupiahAmount(menuForm.harga)) errors.harga = 'Harga harus angka bulat valid.'
     if (!menuForm.categoryId) errors.categoryId = 'Kategori wajib dipilih.'
     if (Object.keys(errors).length > 0) { setMenuErrors(errors); return }
     setMenuSaving(true)
@@ -375,7 +377,7 @@ export default function MenuManager() {
               </div>
               <div className="form-group" style={{ marginBottom: '1.25rem' }}>
                 <label className="form-label">Harga Jual (Rp) *</label>
-                <input type="number" min="0" step="500" className="form-input" placeholder="35000" value={menuForm.harga} onChange={(e) => setMenuForm({ ...menuForm, harga: e.target.value })} required />
+                <RupiahInput className="form-input" placeholder="35000" value={menuForm.harga} onValueChange={(value) => setMenuForm({ ...menuForm, harga: value })} ariaLabel="Harga jual" required />
                 {menuErrors.harga && <span className="text-danger text-sm">{menuErrors.harga}</span>}
               </div>
               {editingMenu && (

@@ -7,6 +7,7 @@ import Receipt, { type PrinterWidth } from '@/components/Receipt'
 import NotaPreview, { type NotaPreviewItem } from '@/components/NotaPreview'
 import PrinterSetup from '@/components/PrinterSetup'
 import PrinterStatusBadge from '@/components/PrinterStatus'
+import RupiahInput from '@/components/RupiahInput'
 import { printer } from '@/lib/printer'
 import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeReceipt } from '@/lib/printer/receipt-encoder'
@@ -556,9 +557,12 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   async function handlePayOrder() {
     if (!selectedOrder) return
     if (cart.length > 0) { setError('Simpan tambahan item dulu sebelum bayar.'); return }
-    if (metodePembayaran === 'CASH' && kembalianResult && !kembalianResult.isValid) {
-      setError(kembalianResult.message)
-      return
+    if (metodePembayaran === 'CASH') {
+      if (uangDiterima === '') { setError('Masukkan uang yang diterima.'); return }
+      if (kembalianResult && !kembalianResult.isValid) {
+        setError(kembalianResult.message)
+        return
+      }
     }
     setError('')
     setSuccess('')
@@ -1011,17 +1015,12 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
                     <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
                       Uang Diterima
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="500"
+                    <RupiahInput
                       placeholder="Masukkan jumlah uang"
                       value={uangDiterima}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        setUangDiterima(val === '' ? '' : Number(val))
-                      }}
+                      onValueChange={setUangDiterima}
                       className="form-input"
+                      ariaLabel="Uang diterima"
                       style={{ fontSize: '1.25rem', padding: '0.75rem', width: '100%', fontWeight: 700 }}
                     />
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
@@ -1087,9 +1086,9 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
             <div className="item-edit-summary"><div className="item-edit-avatar">{editingCartItem.nama.slice(0, 2).toUpperCase()}</div><div style={{ flex: 1 }}><strong>{editingCartItem.nama}</strong><p>Harga menu: Rp {editingCartItem.harga.toLocaleString('id-ID')}</p></div><strong>Rp {(itemUnitPrice(editingCartItem) * editingCartItem.qty).toLocaleString('id-ID')}</strong></div>
             <div className="item-edit-stepper"><button type="button" onClick={() => setEditingCartItem({ ...editingCartItem, qty: Math.max(1, editingCartItem.qty - 1) })}>−</button><strong>{editingCartItem.qty}</strong><button type="button" onClick={() => setEditingCartItem({ ...editingCartItem, qty: editingCartItem.qty + 1 })}>+</button></div>
             <label className="item-edit-option"><input type="checkbox" checked={editingCartItem.hargaSementara !== undefined} onChange={(event) => setEditingCartItem({ ...editingCartItem, hargaSementara: event.target.checked ? editingCartItem.harga : undefined })} /> Ubah harga sementara</label>
-            {editingCartItem.hargaSementara !== undefined && <input type="number" min="0" step="500" className="form-input" value={editingCartItem.hargaSementara} onChange={(event) => setEditingCartItem({ ...editingCartItem, hargaSementara: Number(event.target.value) })} aria-label="Harga sementara" />}
+            {editingCartItem.hargaSementara !== undefined && <RupiahInput className="form-input" value={editingCartItem.hargaSementara} onValueChange={(value) => setEditingCartItem({ ...editingCartItem, hargaSementara: value === '' ? 0 : value })} ariaLabel="Harga sementara" />}
             <label className="item-edit-option"><input type="checkbox" checked={editingCartItem.diskonSatuan > 0} onChange={(event) => setEditingCartItem({ ...editingCartItem, diskonSatuan: event.target.checked ? 500 : 0 })} /> Ubah diskon per jumlah</label>
-            {editingCartItem.diskonSatuan > 0 && <input type="number" min="0" step="500" className="form-input" value={editingCartItem.diskonSatuan} onChange={(event) => setEditingCartItem({ ...editingCartItem, diskonSatuan: Number(event.target.value) })} aria-label="Diskon per jumlah" />}
+            {editingCartItem.diskonSatuan > 0 && <RupiahInput className="form-input" value={editingCartItem.diskonSatuan} onValueChange={(value) => setEditingCartItem({ ...editingCartItem, diskonSatuan: value === '' ? 0 : value })} ariaLabel="Diskon per jumlah" />}
             <label className="item-edit-option"><input type="checkbox" checked={Boolean(editingCartItem.catatan)} onChange={(event) => setEditingCartItem({ ...editingCartItem, catatan: event.target.checked ? ' ' : '' })} /> Tambah catatan singkat</label>
             {editingCartItem.catatan && <input type="text" maxLength={160} className="form-input" placeholder="Contoh: pilih yang besar" value={editingCartItem.catatan} onChange={(event) => setEditingCartItem({ ...editingCartItem, catatan: event.target.value })} />}
             <button type="button" onClick={saveCartItemEdit} className="btn btn-primary item-edit-save">SIMPAN</button>
@@ -1214,16 +1213,13 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
                 <label htmlFor="bayar-langsung-uang" style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '0.5rem' }}>
                   Uang Diterima
                 </label>
-                <input
+                <RupiahInput
                   id="bayar-langsung-uang"
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  step="500"
                   placeholder="Masukkan jumlah uang"
                   value={bayarLangsungUang}
-                  onChange={(event) => setBayarLangsungUang(event.target.value === '' ? '' : Number(event.target.value))}
+                  onValueChange={setBayarLangsungUang}
                   className="form-input"
+                  ariaLabel="Uang diterima"
                   style={{ fontSize: '1.25rem', padding: '0.75rem', width: '100%', fontWeight: 700, minHeight: '48px' }}
                 />
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>

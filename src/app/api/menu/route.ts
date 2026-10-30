@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, isOwner, requireRole, requireWarungAccess } from '@/lib/auth'
 import { getMasterWarungId, syncMenusAcrossWarungs } from '@/lib/menu-sync'
+import { isRupiahAmount } from '@/lib/rupiah'
 
 export async function GET(request: NextRequest) {
   try {
@@ -65,8 +66,8 @@ export async function POST(request: NextRequest) {
     if (!categoryId) {
       return NextResponse.json({ success: false, errors: { categoryId: 'Kategori wajib dipilih.' } }, { status: 422 })
     }
-    if (harga === undefined || harga === null || isNaN(Number(harga)) || Number(harga) < 0) {
-      return NextResponse.json({ success: false, errors: { harga: 'Harga harus angka positif.' } }, { status: 422 })
+    if (!isRupiahAmount(harga)) {
+      return NextResponse.json({ success: false, errors: { harga: 'Harga harus angka bulat positif.' } }, { status: 422 })
     }
 
     const category = await prisma.menuCategory.findFirst({ where: { id: categoryId, warungId } })
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
         warungId,
         categoryId,
         nama: nama.trim(),
-        harga: Number(harga),
+        harga: harga,
         sortOrder: sortOrder !== undefined ? Number(sortOrder) : 0,
         isAktif: true,
       },

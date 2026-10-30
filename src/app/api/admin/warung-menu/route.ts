@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, isOwner, requireRole } from '@/lib/auth'
+import { isRupiahAmount } from '@/lib/rupiah'
 
 export async function GET(request: NextRequest) {
   try {
@@ -50,6 +51,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, message: 'Warung tidak ditemukan.' }, { status: 404 })
       }
 
+      const invalidItem = items.find(
+        (item: { menuId: string; harga: unknown }) =>
+          item.harga !== null && item.harga !== undefined && !isRupiahAmount(item.harga),
+      )
+      if (invalidItem) {
+        return NextResponse.json({ success: false, message: 'Harga harus angka bulat positif.' }, { status: 422 })
+      }
+
       // Delete existing overrides for this warung
       await prisma.warungMenu.deleteMany({ where: { warungId } })
 
@@ -59,7 +68,7 @@ export async function POST(request: NextRequest) {
         .map((item: { menuId: string; harga: number }) => ({
           warungId,
           menuId: item.menuId,
-          harga: Number(item.harga),
+          harga: item.harga,
         }))
 
       if (toInsert.length > 0) {
@@ -76,8 +85,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'warungId, menuId, dan harga wajib diisi.' }, { status: 422 })
     }
 
-    if (isNaN(Number(harga)) || Number(harga) < 0) {
-      return NextResponse.json({ success: false, message: 'Harga harus angka positif.' }, { status: 422 })
+    if (!isRupiahAmount(harga)) {
+      return NextResponse.json({ success: false, message: 'Harga harus angka bulat positif.' }, { status: 422 })
     }
 
     const warung = await prisma.warung.findUnique({ where: { id: warungId } })
@@ -92,8 +101,8 @@ export async function POST(request: NextRequest) {
 
     const warungMenu = await prisma.warungMenu.upsert({
       where: { warungId_menuId: { warungId, menuId } },
-      update: { harga: Number(harga) },
-      create: { warungId, menuId, harga: Number(harga) },
+      update: { harga: harga },
+      create: { warungId, menuId, harga: harga },
       include: {
         warung: { select: { id: true, nama: true, kode: true } },
         menu: { select: { id: true, nama: true, harga: true } },

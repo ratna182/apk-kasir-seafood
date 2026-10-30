@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthContext, isOwner, requireRole, requireWarungAccess } from '@/lib/auth'
 import { syncMenusAcrossWarungs } from '@/lib/menu-sync'
+import { isRupiahAmount } from '@/lib/rupiah'
 
 export async function PUT(
   request: NextRequest,
@@ -30,7 +31,7 @@ export async function PUT(
       const cat = await prisma.menuCategory.findFirst({ where: { id: categoryId, warungId: menu.warungId } })
       if (!cat) errors.categoryId = 'Kategori tidak valid.'
     }
-    if (harga !== undefined && (isNaN(Number(harga)) || Number(harga) < 0)) errors.harga = 'Harga harus angka positif.'
+    if (harga !== undefined && !isRupiahAmount(harga)) errors.harga = 'Harga harus angka bulat positif.'
 
     if (Object.keys(errors).length > 0) {
       return NextResponse.json({ success: false, errors }, { status: 422 })
@@ -50,7 +51,7 @@ export async function PUT(
       data: {
         ...(nama !== undefined && { nama: nama.trim() }),
         ...(categoryId !== undefined && { categoryId }),
-        ...(harga !== undefined && { harga: Number(harga) }),
+        ...(harga !== undefined && { harga: harga }),
         ...(isAktif !== undefined && { isAktif: Boolean(isAktif) }),
         ...(sortOrder !== undefined && { sortOrder: Number(sortOrder) }),
       },

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Save, X, DollarSign, Database } from 'lucide-react'
+import RupiahInput from '@/components/RupiahInput'
 
 interface Warung {
   id: string
@@ -91,9 +92,9 @@ export default function HargaWarungManager() {
     setTimeout(() => setFeedback(null), 4000)
   }
 
-  function handleHargaChange(menuId: string, value: string) {
+  function handleHargaChange(menuId: string, value: number | null) {
     setMenus(prev => prev.map(m => 
-      m.id === menuId ? { ...m, hargaOverride: value === '' ? null : Number(value) } : m
+      m.id === menuId ? { ...m, hargaOverride: value } : m
     ))
   }
 
@@ -223,18 +224,18 @@ export default function HargaWarungManager() {
                       Rp {menu.hargaDefault.toLocaleString('id-ID')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                      <input
-                        type="number"
+                      <RupiahInput
                         value={menu.hargaOverride ?? ''}
-                        onChange={(e) => handleHargaChange(menu.id, e.target.value)}
+                        onValueChange={(value) => handleHargaChange(menu.id, value === '' ? null : value)}
                         placeholder={menu.hargaDefault.toString()}
+                        ariaLabel={`Harga cabang ${menu.nama}`}
                         className="w-32 text-right px-3 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       {menu.hargaOverride !== null && (
                         <button
-                          onClick={() => handleHargaChange(menu.id, '')}
+                          onClick={() => handleHargaChange(menu.id, null)}
                           className="text-red-600 hover:text-red-900"
                         >
                           <X className="h-4 w-4" />

@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { hitungKembalian } from './payment/cash'
+import { isRupiahAmount } from './rupiah'
 
 export const DAILY_TRANSACTION_LIMIT = 150
 export const MAX_CHECKOUT_ITEMS = 100
@@ -70,8 +71,20 @@ export function parseCheckoutItems(
     const item = raw as Record<string, unknown>
     const menuId = typeof item.menuId === 'string' ? item.menuId.trim() : ''
     const qty = Number(item.qty)
-    const hargaSatuan = item.hargaSatuan === undefined ? undefined : Number(item.hargaSatuan)
-    const diskonSatuan = item.diskonSatuan === undefined ? undefined : Number(item.diskonSatuan)
+    let hargaSatuan: number | undefined
+    if (item.hargaSatuan !== undefined) {
+      if (!isRupiahAmount(item.hargaSatuan) || item.hargaSatuan > MAX_UNIT_PRICE) {
+        return { ok: false, message: 'Harga item tidak valid.' }
+      }
+      hargaSatuan = item.hargaSatuan
+    }
+    let diskonSatuan: number | undefined
+    if (item.diskonSatuan !== undefined) {
+      if (!isRupiahAmount(item.diskonSatuan) || item.diskonSatuan > MAX_UNIT_PRICE) {
+        return { ok: false, message: 'Diskon item tidak valid.' }
+      }
+      diskonSatuan = item.diskonSatuan
+    }
     const catatan = item.catatan === undefined ? undefined : String(item.catatan)
 
     if (!menuId) {
@@ -79,12 +92,6 @@ export function parseCheckoutItems(
     }
     if (!Number.isInteger(qty) || qty < 1 || qty > MAX_ITEM_QTY) {
       return { ok: false, message: `Qty harus antara 1 dan ${MAX_ITEM_QTY}.` }
-    }
-    if (hargaSatuan !== undefined && (!Number.isInteger(hargaSatuan) || hargaSatuan < 0 || hargaSatuan > MAX_UNIT_PRICE)) {
-      return { ok: false, message: 'Harga item tidak valid.' }
-    }
-    if (diskonSatuan !== undefined && (!Number.isInteger(diskonSatuan) || diskonSatuan < 0 || diskonSatuan > MAX_UNIT_PRICE)) {
-      return { ok: false, message: 'Diskon item tidak valid.' }
     }
     if (catatan !== undefined && catatan.length > 160) {
       return { ok: false, message: 'Catatan item maksimal 160 karakter.' }
@@ -157,7 +164,7 @@ export async function resolveCheckoutItems(
 }
 
 export function validateCashPayment(value: unknown, total: number): CashResult {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+  if (!isRupiahAmount(value)) {
     return { ok: false, message: 'Uang diterima wajib diisi dengan angka bulat.' }
   }
 

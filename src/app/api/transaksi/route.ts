@@ -5,6 +5,7 @@ import { getAuthContext, getKasirWarungId, requireKasirAccess } from '@/lib/auth
 import { getOpenShift } from '@/lib/kasir-shift'
 import { getStoreDayRange } from '@/lib/time'
 import { VALID_TABLE_NAMES } from '@/lib/table-layout'
+import { isRupiahAmount } from '@/lib/rupiah'
 
 type IncomingItem = {
   menuId: string
@@ -52,8 +53,8 @@ export async function POST(request: NextRequest) {
       if (!item.menuId || !Number.isInteger(qty) || qty < 1) {
         return NextResponse.json({ success: false, message: 'Qty harus minimal 1.' }, { status: 422 })
       }
-      if ((item.hargaSatuan !== undefined && (!Number.isInteger(Number(item.hargaSatuan)) || Number(item.hargaSatuan) < 0)) ||
-        (item.diskonSatuan !== undefined && (!Number.isInteger(Number(item.diskonSatuan)) || Number(item.diskonSatuan) < 0)) ||
+      if ((item.hargaSatuan !== undefined && !isRupiahAmount(item.hargaSatuan)) ||
+        (item.diskonSatuan !== undefined && !isRupiahAmount(item.diskonSatuan)) ||
         (item.catatan !== undefined && (typeof item.catatan !== 'string' || item.catatan.length > 160))) {
         return NextResponse.json({ success: false, message: 'Penyesuaian item tidak valid.' }, { status: 422 })
       }
@@ -78,8 +79,8 @@ export async function POST(request: NextRequest) {
       const menu = menusById.get(item.menuId)!
       const qty = Number(item.qty)
       const effectiveHarga = menu.warungMenus[0]?.harga ?? menu.harga
-      const hargaSatuan = item.hargaSatuan === undefined ? effectiveHarga : Number(item.hargaSatuan)
-      const diskonSatuan = Number(item.diskonSatuan || 0)
+      const hargaSatuan = item.hargaSatuan === undefined ? effectiveHarga : item.hargaSatuan
+      const diskonSatuan = item.diskonSatuan ?? 0
       const catatan = item.catatan?.trim() || null
       if (diskonSatuan > hargaSatuan) {
         return NextResponse.json({ success: false, message: 'Diskon tidak boleh melebihi harga satuan.' }, { status: 422 })
