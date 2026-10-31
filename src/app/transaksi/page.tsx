@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { prisma } from '@/lib/prisma'
 import { getKasirSessionState } from '@/lib/kasir-session'
 import Navbar from '@/components/Navbar'
+import AutoRefresh from '@/components/AutoRefresh'
 import TransaksiClient from './TransaksiClient'
 import { DEFAULT_BRANCH_NAME } from '@/lib/branch-config'
 
@@ -100,6 +101,7 @@ export default async function TransaksiPage() {
     <div className="app-container">
       <Navbar session={session} activePage="transaksi" />
       <div className="content-area">
+        <AutoRefresh intervalMs={15000} />
         <TransaksiClient
           session={{ ...activeSession, warungAlamat }}
           menus={serializedMenus}

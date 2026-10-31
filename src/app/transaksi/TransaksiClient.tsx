@@ -2,12 +2,14 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Search, ShoppingCart, X, Minus, Plus, Printer, CreditCard, Banknote, CheckCircle, Trash2, Pencil, Eye } from 'lucide-react'
 import Receipt, { type PrinterWidth } from '@/components/Receipt'
 import NotaPreview, { type NotaPreviewItem } from '@/components/NotaPreview'
 import PrinterSetup from '@/components/PrinterSetup'
 import PrinterStatusBadge from '@/components/PrinterStatus'
 import RupiahInput from '@/components/RupiahInput'
+import { isRupiahAmount } from '@/lib/rupiah'
 import { printer } from '@/lib/printer'
 import { loadPrinterConfig } from '@/lib/printer/storage'
 import { encodeReceipt } from '@/lib/printer/receipt-encoder'
@@ -116,7 +118,12 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
   const [completedTransaksi, setCompletedTransaksi] = useState<CompletedTransaksi | null>(null)
   const [showReceiptModal, setShowReceiptModal] = useState(false)
   const [printerWidth, setPrinterWidth] = useState<PrinterWidth>('80mm')
-  const [menus] = useState<Menu[]>(initialMenus)
+  const router = useRouter()
+  const menus = initialMenus
+  const [showAddMenu, setShowAddMenu] = useState(false)
+  const [newMenuForm, setNewMenuForm] = useState<{ nama: string; harga: number | '' }>({ nama: '', harga: '' })
+  const [newMenuErrors, setNewMenuErrors] = useState<Record<string, string>>({})
+  const [savingNewMenu, setSavingNewMenu] = useState(false)
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null)
   const [qtyPickerMenuId, setQtyPickerMenuId] = useState<string | null>(null)
   const [qtyPickerPos, setQtyPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
@@ -238,6 +245,47 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
       }
       return [...prev, { menuId: menu.id, nama: menu.nama, harga: menu.harga, qty: 1, diskonSatuan: 0, catatan: '' }]
     })
+  }
+
+  function openAddMenu() {
+    setNewMenuForm({ nama: '', harga: '' })
+    setNewMenuErrors({})
+    setShowAddMenu(true)
+  }
+
+  async function handleAddMenu(e: React.FormEvent) {
+    e.preventDefault()
+    setNewMenuErrors({})
+    const errors: Record<string, string> = {}
+    const nama = newMenuForm.nama.trim()
+    if (!nama) errors.nama = 'Nama menu wajib diisi.'
+    else if (nama.length > 100) errors.nama = 'Nama menu maksimal 100 karakter.'
+    if (!isRupiahAmount(newMenuForm.harga)) errors.harga = 'Harga harus angka bulat valid.'
+    if (Object.keys(errors).length > 0) { setNewMenuErrors(errors); return }
+
+    setSavingNewMenu(true)
+    try {
+      const res = await fetch('/api/kasir/menu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nama, harga: Number(newMenuForm.harga) }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        const created = data.data as Menu
+        setShowAddMenu(false)
+        setSuccess(`Menu "${created.nama}" berhasil ditambahkan.`)
+        router.refresh()
+      } else if (data.errors) {
+        setNewMenuErrors(data.errors)
+      } else {
+        setNewMenuErrors({ _form: data.message || 'Gagal menambahkan menu.' })
+      }
+    } catch {
+      setNewMenuErrors({ _form: 'Koneksi ke server gagal. Coba lagi.' })
+    } finally {
+      setSavingNewMenu(false)
+    }
   }
 
   function itemUnitPrice(item: CartItem) { return Math.max(0, (item.hargaSementara ?? item.harga) - item.diskonSatuan) }
@@ -681,9 +729,21 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
         {/* KOLOM KIRI: MENU PICKER */}
         <div>
           <div className="card" style={{ padding: '1rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: '0.65rem', borderBottom: '1px solid var(--color-border)' }}>
-              <h2 style={{ fontSize: '1.2rem', margin: 0 }}>Menu Utama</h2>
-              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{menus.length} menu</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', paddingBottom: '0.65rem', borderBottom: '1px solid var(--color-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                <h2 style={{ fontSize: '1.2rem', margin: 0 }}>Menu Utama</h2>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{menus.length} menu</span>
+              </div>
+              {session.role === 'KASIR' && (
+                <button
+                  type="button"
+                  onClick={openAddMenu}
+                  className="btn btn-ghost btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', minHeight: '40px' }}
+                >
+                  <Plus size={14} /> Tambah Menu
+                </button>
+              )}
             </div>
             <div style={{ position: 'relative' }}>
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
@@ -1311,6 +1371,85 @@ export default function TransaksiClient({ session, menus: initialMenus, initialA
                 <Printer size={16} /> {printing ? 'Mencetak...' : error ? 'Coba lagi' : 'Cetak Struk'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showAddMenu && (
+        <div
+          className="modal-overlay no-print"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-menu-title"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 1000 }}
+          onClick={(event) => { if (event.target === event.currentTarget && !savingNewMenu) setShowAddMenu(false) }}
+        >
+          <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '1.5rem', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div>
+                <h2 id="add-menu-title" style={{ fontSize: '1.15rem', margin: 0 }}>Tambah Menu</h2>
+                <p className="text-secondary" style={{ margin: '0.25rem 0 0', fontSize: '0.8rem' }}>
+                  Menu langsung tampil untuk semua kasir di cabang ini.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddMenu(false)}
+                disabled={savingNewMenu}
+                className="btn btn-ghost"
+                style={{ minWidth: '44px', minHeight: '44px', padding: 0, justifyContent: 'center' }}
+                aria-label="Tutup"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddMenu}>
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" htmlFor="add-menu-nama">Nama Menu *</label>
+                <input
+                  id="add-menu-nama"
+                  type="text"
+                  className="form-input"
+                  placeholder="Contoh: Kepiting Saus Padang"
+                  value={newMenuForm.nama}
+                  onChange={(e) => setNewMenuForm({ ...newMenuForm, nama: e.target.value })}
+                  autoFocus
+                  maxLength={100}
+                  required
+                />
+                {newMenuErrors.nama && <span className="text-danger text-sm">{newMenuErrors.nama}</span>}
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label className="form-label" htmlFor="add-menu-harga">Harga Jual (Rp) *</label>
+                <RupiahInput
+                  id="add-menu-harga"
+                  className="form-input"
+                  placeholder="35000"
+                  value={newMenuForm.harga}
+                  onValueChange={(value) => setNewMenuForm({ ...newMenuForm, harga: value })}
+                  ariaLabel="Harga jual"
+                  required
+                />
+                {newMenuErrors.harga && <span className="text-danger text-sm">{newMenuErrors.harga}</span>}
+              </div>
+
+              {newMenuErrors._form && (
+                <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  {newMenuErrors._form}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowAddMenu(false)} disabled={savingNewMenu} className="btn btn-ghost">
+                  Batal
+                </button>
+                <button type="submit" disabled={savingNewMenu} className="btn btn-primary" style={{ minWidth: '120px' }}>
+                  {savingNewMenu ? 'Menyimpan...' : 'Tambah Menu'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
