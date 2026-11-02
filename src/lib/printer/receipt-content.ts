@@ -103,9 +103,9 @@ export function buildReceiptLines(receipt: ReceiptData, width: number): ReceiptL
   centered('Seafood Vian Jaya 08', 2)
   centered(formatBranchLine(receipt.warungNama))
   if (receipt.warungAlamat) centered(receipt.warungAlamat)
-  centered('IG : Seafood08vianjaya.id')
-  centered('FB : Seafood08vianjaya')
-  centered('TT : Seafood08vianjaya')
+  centered('IG : Seafoodvianjaya.id')
+  centered('FB : Seafoodvianjaya')
+  centered('TT : Seafoodvianjaya')
 
   separator()
 

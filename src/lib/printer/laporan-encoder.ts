@@ -101,9 +101,9 @@ export async function encodeLaporan(
   }
 
   if (warungAlamat && !data.warung.nama) parts.push(center(warungAlamat))
-  parts.push(center('IG : Seafood08vianjaya.id'))
-  parts.push(center('FB : Seafood08vianjaya'))
-  parts.push(center('TT : Seafood08vianjaya'))
+  parts.push(center('IG : Seafoodvianjaya.id'))
+  parts.push(center('FB : Seafoodvianjaya'))
+  parts.push(center('TT : Seafoodvianjaya'))
 
   parts.push(emit(drawLine(w)))
   parts.push(center('LAPORAN PENJUALAN HARIAN'))

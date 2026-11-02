@@ -170,9 +170,9 @@ describe('encodeReceipt', () => {
     const order = [
       'Seafood Vian Jaya 08',
       'Jl. Raya Kranggan no.18',
-      'IG : Seafood08vianjaya.id',
-      'FB : Seafood08vianjaya',
-      'TT : Seafood08vianjaya',
+      'IG : Seafoodvianjaya.id',
+      'FB : Seafoodvianjaya',
+      'TT : Seafoodvianjaya',
     ]
     let cursor = -1
     for (const marker of order) {

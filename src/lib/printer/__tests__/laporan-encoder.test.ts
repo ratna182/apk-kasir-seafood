@@ -96,7 +96,7 @@ describe('encodeLaporan', () => {
     )
 
     const order = [
-      'IG : Seafood08vianjaya.id',
+      'IG : Seafoodvianjaya.id',
       'LAPORAN PENJUALAN HARIAN',
       'Tanggal: 2026-09-16',
       'Cabang : Seafood & Nasi Uduk Vian Jaya 08 -',

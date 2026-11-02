@@ -397,9 +397,9 @@ function LaporanCard({ sesi, printerWidth }: { sesi: KasirSesi; printerWidth: '5
           <img className="receipt-logo" src="/logo-baru.webp" alt="Seafood 08 Vian Jaya" style={{ display: 'block', width: '1.7cm', height: '1.7cm', objectFit: 'contain', margin: '0 auto 3px' }} />
           {sesi.warungAlamat && <p>{sesi.warungAlamat}</p>}
           <div className="receipt-socials">
-            <p>IG : Seafood08vianjaya.id</p>
-            <p>FB : Seafood08vianjaya</p>
-            <p>TT : Seafood08vianjaya</p>
+            <p>IG : Seafoodvianjaya.id</p>
+            <p>FB : Seafoodvianjaya</p>
+            <p>TT : Seafoodvianjaya</p>
           </div>
         </div>
         <div className="print-divider" />
