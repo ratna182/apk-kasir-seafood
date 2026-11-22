@@ -13,7 +13,10 @@
     "android:sync": "npx cap sync android",
     "android:open": "npx cap open android",
     "seed": "npx tsx prisma/seed.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "build:worker": "opennextjs-cloudflare build",
+    "preview": "opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare deploy"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -21,6 +24,8 @@
   "dependencies": {
     "@capacitor/android": "^8.0.0",
     "@capacitor/core": "^8.0.0",
+    "@neondatabase/serverless": "^1.2.1",
+    "@prisma/adapter-neon": "^6.19.3",
     "@prisma/client": "6.19.3",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
@@ -31,22 +36,26 @@
     "pdf-lib": "^1.17.1",
     "prisma": "6.19.3",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",
+    "@opennextjs/cloudflare": "^1.20.18",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^4.5.2",
     "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "jsdom": "^30.0.1",
     "typescript": "^5",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.166.0"
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
