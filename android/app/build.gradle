@@ -6,6 +6,16 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
 
+def branchLabel = System.getenv('APK_BRANCH_NAME') ?: System.getenv('NEXT_PUBLIC_BRANCH_NAME') ?: 'Kranggan'
+def branchMatch = branchLabel =~ /\(([^)]+)\)/
+def branchSlug = (branchMatch.find() ? branchMatch.group(1) : branchLabel)
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/, '-')
+        .replaceAll(/^-+|-+$/, '')
+if (!branchSlug) {
+    branchSlug = 'kasir'
+}
+
 android {
     namespace = "id.vianjaya.kasir.cabang1"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -51,6 +61,13 @@ android {
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (keystorePropertiesFile.exists()) signingConfig signingConfigs.release
+        }
+    }
+    applicationVariants.all { variant ->
+        if (variant.buildType.name == 'release') {
+            variant.outputs.all { output ->
+                outputFileName = "${branchSlug}.apk"
+            }
         }
     }
 }
