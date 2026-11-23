@@ -14,9 +14,9 @@
     "android:open": "npx cap open android",
     "seed": "npx tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "build:worker": "opennextjs-cloudflare build",
-    "preview": "opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare deploy"
+    "build:worker": "opennextjs-cloudflare build && node scripts/scrub-env.mjs",
+    "preview": "node scripts/scrub-env.mjs && opennextjs-cloudflare preview",
+    "deploy": "node scripts/scrub-env.mjs && opennextjs-cloudflare deploy"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -32,7 +32,7 @@
     "exceljs": "^4.4.0",
     "iron-session": "^9.0.1",
     "lucide-react": "^1.44.0",
-    "next": "16.3.4",
+    "next": "16.4.6",
     "pdf-lib": "^1.17.1",
     "prisma": "6.19.3",
     "react": "19.2.8",
@@ -51,7 +51,7 @@
     "@vitejs/plugin-react": "^4.5.2",
     "@vitest/coverage-v8": "^3.2.7",
     "eslint": "^9",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.4.6",
     "jsdom": "^30.0.1",
     "typescript": "^5",
     "vitest": "^3.2.4",
