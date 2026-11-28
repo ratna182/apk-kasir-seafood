@@ -1,6 +1,6 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
-const serverUrl = process.env.CAPACITOR_SERVER_URL || 'https://kasir-seafood-experiment.vianjaya-pos.workers.dev'
+const serverUrl = process.env.CAPACITOR_SERVER_URL || 'https://kasir-seafood-experiment.vrtx-lab.workers.dev'
 
 if (serverUrl && !/^https:\/\//.test(serverUrl)) {
   throw new Error('CAPACITOR_SERVER_URL harus menggunakan HTTPS')
@@ -14,8 +14,7 @@ const config: CapacitorConfig = {
     url: serverUrl,
     androidScheme: 'https',
     allowNavigation: [
-      'kasir-seafood-experiment.vianjaya-pos.workers.dev',
-      'kasir-seafood.vercel.app'
+      'kasir-seafood-experiment.vrtx-lab.workers.dev'
     ]
   } : undefined,
   loggingBehavior: 'production',

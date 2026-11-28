@@ -8,6 +8,13 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    exclude: [
+      'node_modules/**',
+      'tests/**',
+      '.agents/**',
+      '.open-next/**',
+      '.wrangler/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -19,6 +26,9 @@ export default defineConfig({
         '**/*.css',
         '.next/',
         'prisma/',
+        '.agents/',
+        '.open-next/',
+        '.wrangler/',
       ],
     },
   },

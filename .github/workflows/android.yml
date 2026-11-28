@@ -57,6 +57,10 @@ jobs:
 
       - name: Capacitor sync android
         run: npx cap sync android
+        env:
+          CAPACITOR_SERVER_URL: ${{ vars.CAPACITOR_SERVER_URL || 'https://kasir-seafood-experiment.vrtx-lab.workers.dev' }}
+          CAPACITOR_APP_ID: ${{ vars.CAPACITOR_APP_ID || 'id.vianjaya.kasir.cabang1' }}
+          CAPACITOR_APP_NAME: ${{ vars.CAPACITOR_APP_NAME || 'Kasir Vian Jaya 08' }}
 
       - name: Build APKs
         working-directory: android

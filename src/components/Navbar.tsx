@@ -121,17 +121,18 @@ export default function Navbar({ session, activePage }: NavbarProps) {
               </Link>
             </>
           )}
-          <Link
-            href="/printer-test"
-            className={`btn btn-sm ${activePage === 'printer-test' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem' }}
-          >
-            <Printer size={14} />
-            Printer Test
-          </Link>
         </div>
 
         <div className="navbar-actions" style={{ marginLeft: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Link
+            href="/printer-test"
+            className={`btn btn-sm ${activePage === 'printer-test' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', whiteSpace: 'nowrap' }}
+            title="Test Print / Diagnostik Printer"
+          >
+            <Printer size={14} />
+            Test Print
+          </Link>
           <Link
             href="/profil"
             className="navbar-user text-sm text-secondary"
