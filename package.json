@@ -24,7 +24,7 @@
   "dependencies": {
     "@capacitor/android": "^8.0.0",
     "@capacitor/core": "^8.0.0",
-    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/adapter-pg": "6.19.3",
     "@prisma/client": "6.19.3",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
