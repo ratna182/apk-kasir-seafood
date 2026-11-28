@@ -6,6 +6,7 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
 
+def releaseVersionName = '1.4.9'
 def branchLabel = System.getenv('APK_BRANCH_NAME') ?: System.getenv('NEXT_PUBLIC_BRANCH_NAME') ?: 'Kranggan'
 def branchMatch = branchLabel =~ /\(([^)]+)\)/
 def branchSlug = (branchMatch.find() ? branchMatch.group(1) : branchLabel)
@@ -29,8 +30,8 @@ android {
         applicationId "id.vianjaya.kasir.cabang1"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 13
-        versionName "1.4.8"
+        versionCode 14
+        versionName releaseVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -66,7 +67,7 @@ android {
     applicationVariants.all { variant ->
         if (variant.buildType.name == 'release') {
             variant.outputs.all { output ->
-                outputFileName = "${branchSlug}.apk"
+                outputFileName = "${branchSlug}-${releaseVersionName}.apk"
             }
         }
     }
