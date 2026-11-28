@@ -69,12 +69,16 @@ export async function POST(request: NextRequest) {
     loginRateLimiter.reset(rateLimitKey)
 
     if (user.role === 'KASIR') {
-      await recordActivity(prisma, {
-        userId: user.id,
-        warungId: user.warungId,
-        aktivitas: 'LOGIN',
-        detail: 'Kasir berhasil login',
-      })
+      try {
+        await recordActivity(prisma, {
+          userId: user.id,
+          warungId: user.warungId,
+          aktivitas: 'LOGIN',
+          detail: 'Kasir berhasil login',
+        })
+      } catch (logError) {
+        console.error('[POST /api/auth/login] Warning: gagal mencatat activity log kasir:', logError)
+      }
     }
 
     const sessionUser: SessionUser = {

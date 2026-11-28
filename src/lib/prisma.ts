@@ -1,6 +1,6 @@
-import { cache } from 'react'
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { Pool } from 'pg'
 
 type GlobalPrisma = typeof globalThis & {
   __prisma?: PrismaClient
@@ -10,6 +10,7 @@ type CloudflareContext = {
   env?: Record<string, unknown> & {
     HYPERDRIVE?: { connectionString?: string }
   }
+  ctx?: object
 }
 
 function getCloudflareContextSafe(): CloudflareContext | undefined {
@@ -54,19 +55,37 @@ function getConnectionString(): string | undefined {
 
 function createPrismaClient(): PrismaClient {
   const connectionString = getConnectionString()
-  const adapter = connectionString
-    ? new PrismaPg({ connectionString, maxUses: 1 })
-    : undefined
+  if (!connectionString) {
+    return new PrismaClient({
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    })
+  }
+
+  const pool = new Pool({
+    connectionString,
+    max: 5,
+    allowExitOnIdle: true,
+  })
+
+  const adapter = new PrismaPg(pool)
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })
 }
 
-const getRequestPrisma = cache(createPrismaClient)
+const requestClients = new WeakMap<object, PrismaClient>()
 
 function getPrismaClient(): PrismaClient {
-  if (getCloudflareContextSafe()) return getRequestPrisma()
+  const ctx = getCloudflareContextSafe()?.ctx
+  if (ctx) {
+    let client = requestClients.get(ctx)
+    if (!client) {
+      client = createPrismaClient()
+      requestClients.set(ctx, client)
+    }
+    return client
+  }
 
   const globalForPrisma = globalThis as GlobalPrisma
   globalForPrisma.__prisma ??= createPrismaClient()
@@ -83,3 +102,4 @@ export const prisma = new Proxy({} as PrismaClient, {
     return value
   },
 })
+
