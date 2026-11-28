@@ -6,7 +6,7 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
 }
 
-def releaseVersionName = '1.4.9'
+def releaseVersionName = '1.5.0'
 def branchLabel = System.getenv('APK_BRANCH_NAME') ?: System.getenv('NEXT_PUBLIC_BRANCH_NAME') ?: 'Kranggan'
 def branchMatch = branchLabel =~ /\(([^)]+)\)/
 def branchSlug = (branchMatch.find() ? branchMatch.group(1) : branchLabel)
@@ -30,7 +30,7 @@ android {
         applicationId "id.vianjaya.kasir.cabang1"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 14
+        versionCode 15
         versionName releaseVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
